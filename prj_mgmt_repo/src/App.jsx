@@ -1,4 +1,4 @@
-// v10.8
+// v7.0
 import React, { useState, useMemo, useRef, useCallback, useEffect } from "react";
 
 /* ==========================================================
@@ -124,8 +124,8 @@ function computeDrift(proj) {
 /* ==========================================================
    PERSISTENCE - localStorage + GitHub Gist sync
 ========================================================== */
-const LS_KEY      = "prj_mgmt_0_v6";
-const LS_SETTINGS = "prj_mgmt_0_v6_settings";
+const LS_KEY      = "prj_mgmt_0_v7";
+const LS_SETTINGS = "prj_mgmt_0_v7_settings";
 
 const loadLS   = () => { try { const r=localStorage.getItem(LS_KEY); return r?JSON.parse(r):null; } catch(e){return null;} };
 const saveLS   = v  => { try { localStorage.setItem(LS_KEY, JSON.stringify(v)); } catch(e){} };
@@ -154,7 +154,7 @@ async function gistLoad(gistId, token) {
 async function gistSave(gistId, token, spaces) {
   if(!gistId?.trim()) throw new Error("No Gist ID configured.");
   if(!token?.trim()) throw new Error("Token required to write to Gist.");
-  const payload = {version:6, savedAt:new Date().toISOString(), spaces};
+  const payload = {version:7, savedAt:new Date().toISOString(), spaces};
   const res = await fetch(`https://api.github.com/gists/${gistId.trim()}`, {
     method:"PATCH",
     headers:{"Authorization":`Bearer ${token.trim()}`,"Content-Type":"application/json","Accept":"application/vnd.github+json"},
@@ -188,7 +188,7 @@ function exportCSV(spaces) {
    JSON BACKUP / RESTORE
 ========================================================== */
 function exportJSON(spaces) {
-  const payload = { version: 6, exportedAt: new Date().toISOString(), spaces };
+  const payload = { version: 7, exportedAt: new Date().toISOString(), spaces };
   const blob = new Blob([JSON.stringify(payload, null, 2)], {type:"application/json"});
   const url  = URL.createObjectURL(blob);
   const a    = Object.assign(document.createElement("a"),{href:url,download:`prj_mgmt_backup_${todayS}.json`});
@@ -535,7 +535,7 @@ function shareViaEmail(events, subject) {
 function generateICSText(events) {
   const fmt = d => d.replace(/-/g,"");
   const lines = [
-    "BEGIN:VCALENDAR","VERSION:2.0","PRODID:-//PRJ_MGMT//v6//EN","CALSCALE:GREGORIAN","METHOD:REQUEST"
+    "BEGIN:VCALENDAR","VERSION:2.0","PRODID:-//PRJ_MGMT//v7//EN","CALSCALE:GREGORIAN","METHOD:REQUEST"
   ];
   events.forEach(ev=>{
     lines.push("BEGIN:VEVENT");
@@ -684,7 +684,7 @@ function CtxMenu({items,onClose}){
     document.addEventListener("keydown",k);
     return()=>{document.removeEventListener("click",h);document.removeEventListener("keydown",k);};
   },[onClose]);
-  return <div style={{position:"absolute",right:0,top:"100%",zIndex:300,background:C.card2,border:`1px solid ${C.border}`,borderRadius:9,padding:"5px",minWidth:170,boxShadow:"0 6px 28px rgba(0,0,0,0.6)"}}>
+  return <div style={{position:"absolute",right:0,top:"100%",zIndex:1000,background:C.card2,border:`1px solid ${C.border}`,borderRadius:9,padding:"5px",minWidth:170,boxShadow:"0 6px 28px rgba(0,0,0,0.6)"}}>
     {items.map((item,i)=>item==="---"
       ? <div key={i} style={{height:1,background:C.border,margin:"4px 0"}}/>
       : <button key={i} onClick={()=>{item.fn();onClose();}}
@@ -1531,16 +1531,18 @@ function SpacesTab({spaces,setSpaces,searchQ}){
                               <div style={{display:"flex",alignItems:"center",gap:5,flexShrink:0,marginLeft:8}}>
                                 <span style={{fontSize:12,fontWeight:800,color:pr.color,fontFamily:"'JetBrains Mono',monospace"}}>{prog}%</span>
                                 <span style={{fontSize:10,color:isActive?pr.color:C.dim}}>{isActive?"v":">"}</span>
-                                <div style={{position:"relative"}} onClick={e=>e.stopPropagation()}>
+                                <div style={{position:"relative",zIndex:500}} onClick={e=>e.stopPropagation()}>
                                 <button onClick={e=>{e.stopPropagation();setPrMenu(prMenu===pr.id?null:pr.id);}}
                                   style={{background:"none",border:`1px solid ${C.border}`,borderRadius:5,color:C.muted,cursor:"pointer",fontSize:12,padding:"1px 6px",lineHeight:1.2}}>...</button>
                                 {prMenu===pr.id&&(
+                                  <div style={{position:"absolute",right:0,top:"calc(100% + 4px)",zIndex:1000}}>
                                   <ProjCtxMenu pr={pr} sp={sp}
                                     onCopy={()=>copyProject(pr)}
                                     onFlag={()=>updProj(sp.id,pr.id,()=>({flagged:!pr.flagged}))}
                                     onArchive={()=>archiveProject(sp.id,pr.id)}
                                     onDelete={()=>deleteProject(sp.id,pr.id)}
                                     onClose={()=>setPrMenu(null)}/>
+                                  </div>
                                 )}
                                 </div>
                               </div>
@@ -2875,7 +2877,7 @@ export default function App(){
         <div style={{display:"flex",alignItems:"center",gap:8,marginRight:8}}>
           <div style={{width:26,height:26,borderRadius:6,background:`linear-gradient(135deg,${C.cyan},${C.blue})`,display:"flex",alignItems:"center",justifyContent:"center",boxShadow:`0 0 12px ${C.cyan}44`,fontSize:12,fontWeight:800,color:"#07090f"}}>*</div>
           <span style={{fontSize:11,fontWeight:800,color:C.text,fontFamily:"'Syne',sans-serif",letterSpacing:"0.05em"}}>PRJ_MGMT</span>
-          <span style={{fontSize:8,color:C.muted,fontFamily:"'JetBrains Mono',monospace"}}>v6</span>
+          <span style={{fontSize:8,color:C.muted,fontFamily:"'JetBrains Mono',monospace"}}>v7</span>
         </div>
 
         {/* Nav */}
