@@ -1,4 +1,4 @@
-// v10.1
+// v10.2
 import React, { useState, useMemo, useRef, useCallback, useEffect } from "react";
 
 /* ==========================================================
@@ -735,6 +735,74 @@ function SubRow({sub,taskId,portColor,onUpdSub,dragIdx,index,onReorderSubs,onDel
 /* ==========================================================
    TASK ROW
 ========================================================== */
+
+function TaskAttachments({task,onUpdTask,portColor}){
+  const [adding,setAdding] = useState(false);
+  const [newUrl,setNewUrl] = useState("");
+  const [newLabel,setNewLabel] = useState("");
+  const attachments = task.attachments||[];
+
+  const addLink = () => {
+    if(!newUrl.trim()) return;
+    const url = newUrl.startsWith("http")?newUrl:"https://"+newUrl;
+    const label = newLabel.trim()||url;
+    onUpdTask(task.id,()=>({attachments:[...attachments,{id:uid(),url,label,type:"link",addedAt:todayS}]}));
+    setNewUrl(""); setNewLabel(""); setAdding(false);
+  };
+  const removeAttachment = id => onUpdTask(task.id,()=>({attachments:attachments.filter(a=>a.id!==id)}));
+
+  if(!attachments.length&&!adding) return (
+    <div style={{padding:"2px 18px 6px"}}>
+      <button onClick={()=>setAdding(true)}
+        style={{background:"none",border:"none",color:C.dim,cursor:"pointer",fontSize:9,
+          fontFamily:"'JetBrains Mono',monospace",padding:"2px 0"}}>
+        + Add link / attachment
+      </button>
+    </div>
+  );
+
+  return (
+    <div style={{padding:"4px 18px 8px",borderBottom:`1px solid ${C.border}11`}}>
+      {attachments.length>0&&(
+        <div style={{marginBottom:4}}>
+          {attachments.map(a=>(
+            <div key={a.id} style={{display:"flex",alignItems:"center",gap:6,marginBottom:3}}>
+              <span style={{fontSize:9,color:C.dim,fontFamily:"'JetBrains Mono',monospace"}}>@</span>
+              <a href={a.url} target="_blank" rel="noopener noreferrer"
+                style={{fontSize:9,color:portColor,fontFamily:"'JetBrains Mono',monospace",
+                  textDecoration:"none",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}
+                onClick={e=>e.stopPropagation()}>
+                {a.label}
+              </a>
+              <button onClick={e=>{e.stopPropagation();removeAttachment(a.id);}}
+                style={{background:"none",border:"none",color:C.dim,cursor:"pointer",fontSize:10,padding:"0 2px",flexShrink:0}}>x</button>
+            </div>
+          ))}
+        </div>
+      )}
+      {adding?(
+        <div style={{display:"flex",gap:4,alignItems:"center",flexWrap:"wrap"}} onClick={e=>e.stopPropagation()}>
+          <input value={newLabel} onChange={e=>setNewLabel(e.target.value)}
+            placeholder="Label (optional)"
+            style={{...St.inp,fontSize:9,padding:"3px 7px",width:110}}/>
+          <input value={newUrl} onChange={e=>setNewUrl(e.target.value)}
+            placeholder="URL or link..."
+            onKeyDown={e=>{if(e.key==="Enter")addLink();if(e.key==="Escape")setAdding(false);}}
+            style={{...St.inp,fontSize:9,padding:"3px 7px",flex:1,minWidth:140}}/>
+          <button onClick={addLink} style={{...St.btn,padding:"3px 9px",fontSize:9}}>Add</button>
+          <button onClick={()=>setAdding(false)} style={{...St.ghost,padding:"3px 7px",fontSize:9}}>Cancel</button>
+        </div>
+      ):(
+        <button onClick={()=>setAdding(true)}
+          style={{background:"none",border:"none",color:C.dim,cursor:"pointer",fontSize:9,
+            fontFamily:"'JetBrains Mono',monospace",padding:"2px 0"}}>
+          + Add link / attachment
+        </button>
+      )}
+    </div>
+  );
+}
+
 function TaskRow({task,portColor,onUpdTask,onUpdSub,onAddSub,taskDragIdx,taskIndex,onReorderTasks,onReorderSubs,onDeleteTask,onArchiveTask,onDeleteSub,onArchiveSub,onCopyTask,onCopySub,spaceId,projId}){
   const [exp,setExp]          = useState(false);
   const [showArch,setShowArch]= useState(false);
@@ -803,6 +871,28 @@ function TaskRow({task,portColor,onUpdTask,onUpdSub,onAddSub,taskDragIdx,taskInd
           </div>
           <ActionBtns archived={task.archived} onArchive={()=>onArchiveTask(task.id)} onDelete={()=>onDeleteTask(task.id)}/>
         </div>
+
+        {/* Task Notes inline panel */}
+        {exp&&(
+          <div style={{padding:"6px 18px 4px",borderBottom:`1px solid ${C.border}11`}}>
+            <textarea
+              value={task.notes||""}
+              onChange={e=>onUpdTask(task.id,()=>({notes:e.target.value}))}
+              placeholder="Task notes, links, context..."
+              rows={task.notes?3:1}
+              onFocus={e=>e.target.rows=3}
+              onBlur={e=>{if(!task.notes)e.target.rows=1;}}
+              style={{...St.inp,resize:"vertical",fontSize:9,lineHeight:1.6,
+                width:"100%",padding:"5px 8px",color:C.muted,
+                borderColor:task.notes?`${portColor}44`:C.border,
+                background:task.notes?"rgba(255,255,255,0.03)":"transparent"}}/>
+          </div>
+        )}
+
+        {/* Task Attachments - links/URLs */}
+        {exp&&(
+          <TaskAttachments task={task} onUpdTask={onUpdTask} portColor={portColor}/>
+        )}
 
         {/* Subtasks */}
         <Collapse open={exp}>
@@ -1031,15 +1121,20 @@ function ProjectDetail({proj,portColor,spaceName,onUpdate,onUpdTask,onUpdSub,onA
    SPACES TAB (renamed from Portfolios)
 ========================================================== */
 
-function SpaceCtxMenu({sp,clipboard,onAdd,onPaste,onArchive,onDelete,onClose}){
-  const pasteItem = clipboard && clipboard.type==="project"
-    ? {icon:"=",label:'Paste "'+clipboard.item.name+'"',fn:onPaste}
+function SpaceCtxMenu({sp,clipboard,onAdd,onPasteProject,onCopy,onPasteSpace,onArchive,onDelete,onClose}){
+  const pasteProjectItem = clipboard && clipboard.type==="project"
+    ? {icon:"=",label:'Paste proj "'+clipboard.item.name+'"',fn:onPasteProject}
+    : null;
+  const pasteSpaceItem = clipboard && clipboard.type==="space"
+    ? {icon:"=",label:'Paste space "'+clipboard.item.name+'"',fn:onPasteSpace}
     : null;
   const archLabel = sp.archived ? "Restore Space" : "Archive Space";
   const archIcon  = sp.archived ? "^" : "v";
   const items = [{icon:"+ >",label:"Add Project",fn:onAdd}];
-  if(pasteItem) items.push(pasteItem);
+  if(pasteProjectItem) items.push(pasteProjectItem);
+  if(pasteSpaceItem) items.push(pasteSpaceItem);
   items.push("---");
+  items.push({icon:"=",label:"Copy Space",fn:onCopy});
   items.push({icon:archIcon,label:archLabel,fn:onArchive});
   items.push({icon:"x",label:"Delete Space",danger:true,fn:onDelete});
   return <CtxMenu onClose={onClose} items={items}/>;
@@ -1130,13 +1225,23 @@ function SpacesTab({portfolios,setPortfolios,searchQ}){
     ask("Archive project?","Hidden from view but fully recoverable.",
       ()=>{ updProj(sid,prid,()=>({archived:true})); if(activeProjId===prid)setActiveProjId(null); setConfirm(null); });
   };
-  const deleteSpace = sid => ask("Delete space?","Permanently removes this space and ALL its projects, tasks, and subtasks.",
+  const deleteSpace  = sid => ask("Delete space?","Permanently removes this space and ALL its projects, tasks, and subtasks.",
     ()=>{ updPort(p=>({spaces:p.spaces.filter(s=>s.id!==sid)})); if(activeSpId===sid){setActiveSpId(null);setActiveProjId(null);} setConfirm(null); });
   const archiveSpace = sid => {
     const sp=port?.spaces.find(s=>s.id===sid);
     if(sp?.archived){ updSpace(sid,()=>({archived:false})); return; }
     ask("Archive space?","Hides this space. Projects preserved.",
       ()=>{ updSpace(sid,()=>({archived:true})); if(activeSpId===sid){setActiveSpId(null);setActiveProjId(null);} setConfirm(null); });
+  };
+  const copySpace    = sid => { const sp=port?.spaces.find(s=>s.id===sid); if(sp) setClipboard({type:"space",item:sp}); };
+  const pasteSpace   = () => {
+    if(!clipboard||clipboard.type!=="space") return;
+    const newSp = {...clipboard.item, id:uid(), name:clipboard.item.name+" (copy)",
+      projects:(clipboard.item.projects||[]).map(pr=>({...pr,id:uid(),
+        tasks:(pr.tasks||[]).map(t=>({...t,id:uid(),subtasks:(t.subtasks||[]).map(s=>({...s,id:uid()}))}))
+      }))};
+    updPort(p=>({spaces:[...p.spaces,newSp]}));
+    setActiveSpId(newSp.id);
   };
   const deleteTask   = (sid,prid,tid) => { const t=port?.spaces.find(s=>s.id===sid)?.projects.find(p=>p.id===prid)?.tasks.find(t=>t.id===tid); const sc=(t?.subtasks||[]).length; ask("Delete task?",sc?`Will also delete ${sc} subtask${sc>1?"s":""}.`:"Task permanently removed.",()=>{ updProj(sid,prid,pr=>({tasks:pr.tasks.filter(t=>t.id!==tid)})); setConfirm(null); }); };
   const archiveTask  = (sid,prid,tid) => { const t=port?.spaces.find(s=>s.id===sid)?.projects.find(p=>p.id===prid)?.tasks.find(t=>t.id===tid); if(t?.archived){ updTask(sid,prid,tid,()=>({archived:false})); return; } updTask(sid,prid,tid,()=>({archived:true})); };
@@ -1203,7 +1308,7 @@ function SpacesTab({portfolios,setPortfolios,searchQ}){
         {/* Clipboard indicator */}
         {clipboard&&(
           <div style={{background:`${C.yellow}15`,border:`1px solid ${C.yellow}44`,borderRadius:7,padding:"6px 10px",marginBottom:8,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-            <span style={{fontSize:9,color:C.yellow,fontFamily:"'JetBrains Mono',monospace"}}>Copy {clipboard.type}: "{clipboard.item.name}"</span>
+            <span style={{fontSize:9,color:C.yellow,fontFamily:"'JetBrains Mono',monospace"}}>{clipboard.type === "space" ? "Space" : clipboard.type === "project" ? "Project" : clipboard.type === "task" ? "Task" : "Subtask"}: "{clipboard.item.name}"</span>
             <button onClick={()=>setClipboard(null)} style={{background:"none",border:"none",color:C.dim,cursor:"pointer",fontSize:11}}>x</button>
           </div>
         )}
@@ -1257,7 +1362,9 @@ function SpacesTab({portfolios,setPortfolios,searchQ}){
                     {spMenu===sp.id&&(
                       <SpaceCtxMenu sp={sp} clipboard={clipboard}
                         onAdd={()=>{addProject(sp.id);setCollapsedSp(s=>({...s,[sp.id]:false}));}}
-                        onPaste={()=>pasteProject(sp.id)}
+                        onPasteProject={()=>pasteProject(sp.id)}
+                        onCopy={()=>copySpace(sp.id)}
+                        onPasteSpace={()=>pasteSpace()}
                         onArchive={()=>archiveSpace(sp.id)}
                         onDelete={()=>deleteSpace(sp.id)}
                         onClose={()=>setSpMenu(null)}/>
@@ -1452,8 +1559,10 @@ function GanttTab({portfolios}){
   const LABEL=210; const CW=660;
   const [rangeStart,setRangeStart] = useState(new Date(2026,0,1));
   const [totalDays,setTotalDays]   = useState(90);
-  const [filterSpId,setFilterSpId] = useState("all");
-  const [filterPrId,setFilterPrId] = useState("all");
+  const [selPorts,setSelPorts] = useState(new Set(["all"]));
+  const [selSpaces,setSelSpaces] = useState(new Set(["all"]));
+  const [selProjs,setSelProjs]  = useState(new Set(["all"]));
+  const [showFilters,setShowFilters] = useState(false);
   const [expanded,setExpanded]     = useState({});
   const [blSel,setBlSel]           = useState({});
   const [dateFrom,setDateFrom]     = useState("2026-01-01");
@@ -1478,22 +1587,36 @@ function GanttTab({portfolios}){
     return null;
   };
 
-  const allSpaces = useMemo(()=>
-    portfolios.flatMap(p=>p.spaces.filter(s=>!s.archived).map(s=>({...s,portColor:p.color,portName:p.name,portId:p.id})))
-  ,[portfolios]);
+  const activePorts = useMemo(()=>portfolios.filter(p=>!p.archived),[portfolios]);
 
-  const spaceProjects = useMemo(()=>{
-    if(filterSpId==="all") return portfolios.flatMap(p=>p.spaces.flatMap(s=>s.projects.filter(pr=>!pr.archived)));
-    return allSpaces.find(s=>s.id===filterSpId)?.projects.filter(pr=>!pr.archived)||[];
-  },[filterSpId,allSpaces,portfolios]);
+  const allSpaces = useMemo(()=>
+    activePorts.flatMap(p=>p.spaces.filter(s=>!s.archived).map(s=>({...s,portColor:p.color,portName:p.name,portId:p.id})))
+  ,[activePorts]);
+
+  const toggleSet = (setter,id) => setter(prev => {
+    const next = new Set(prev);
+    if(id==="all"){ return new Set(["all"]); }
+    next.delete("all");
+    if(next.has(id)) next.delete(id); else next.add(id);
+    if(!next.size) return new Set(["all"]);
+    return next;
+  });
+
+  const filteredSpaces = useMemo(()=>{
+    if(selPorts.has("all")) return allSpaces;
+    return allSpaces.filter(s=>selPorts.has(s.portId));
+  },[selPorts,allSpaces]);
+
+  const allProjects = useMemo(()=>
+    filteredSpaces.flatMap(s=>s.projects.filter(pr=>!pr.archived).map(pr=>({...pr,spaceId:s.id,spaceName:s.name,portColor:s.portColor,portId:s.portId,portName:s.portName})))
+  ,[filteredSpaces]);
 
   const visible = useMemo(()=>{
-    let ps=portfolios.flatMap(p=>p.spaces.filter(s=>!s.archived).flatMap(s=>
-      s.projects.filter(pr=>!pr.archived).map(pr=>({...pr,portColor:p.color,portId:p.id,spaceId:s.id,spaceName:s.name}))));
-    if(filterSpId!=="all") ps=ps.filter(pr=>pr.spaceId===filterSpId);
-    if(filterPrId!=="all") ps=ps.filter(pr=>pr.id===filterPrId);
+    let ps = selSpaces.has("all") ? allProjects : allProjects.filter(pr=>selSpaces.has(pr.spaceId));
+    if(!selProjs.has("all")) ps=ps.filter(pr=>selProjs.has(pr.id));
+    const seen=new Set(); ps=ps.filter(pr=>{ if(seen.has(pr.id)) return false; seen.add(pr.id); return true; });
     return ps;
-  },[portfolios,filterSpId,filterPrId]);
+  },[allProjects,selSpaces,selProjs]);
 
   const applyRange = () => {
     const s=new Date(dateFrom),e=new Date(dateTo);
@@ -1547,23 +1670,73 @@ function GanttTab({portfolios}){
   const ROW=34;
 
   return (
-    <div>
+    <div onClick={()=>setShowFilters(false)}>
       <div style={{marginBottom:14}}>
         <div style={{fontSize:19,fontWeight:800,color:C.text,fontFamily:"'Syne',sans-serif"}}>Gantt Timeline</div>
       </div>
 
       {/* Controls row 1: filters */}
       <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:8,flexWrap:"wrap"}}>
-        <select value={filterSpId} onChange={e=>{setFilterSpId(e.target.value);setFilterPrId("all");}}
-          style={{...St.inp,width:"auto",padding:"5px 9px",fontSize:10}}>
-          <option value="all">All Spaces</option>
-          {allSpaces.map(s=><option key={s.id} value={s.id}>{s.portName} > {s.name}</option>)}
-        </select>
-        <select value={filterPrId} onChange={e=>setFilterPrId(e.target.value)}
-          style={{...St.inp,width:"auto",padding:"5px 9px",fontSize:10,opacity:filterSpId==="all"?0.45:1}}>
-          <option value="all">All Projects</option>
-          {spaceProjects.map(pr=><option key={pr.id} value={pr.id}>{pr.name}</option>)}
-        </select>
+        {/* Filter toggle button */}
+        <div style={{position:"relative"}}>
+          <button onClick={e=>{e.stopPropagation();setShowFilters(f=>!f);}}
+            style={{...St.ghost,padding:"5px 11px",fontSize:10,
+              borderColor:(!selPorts.has("all")||!selSpaces.has("all")||!selProjs.has("all"))?C.cyan:C.border,
+              color:(!selPorts.has("all")||!selSpaces.has("all")||!selProjs.has("all"))?C.cyan:C.muted}}>
+            Filter {(!selPorts.has("all")||!selSpaces.has("all")||!selProjs.has("all"))?"*":""}
+          </button>
+          {showFilters&&(
+            <div onClick={e=>e.stopPropagation()}
+              style={{position:"absolute",top:"calc(100% + 6px)",left:0,zIndex:300,
+                background:"#0d1525",border:`1px solid ${C.border}`,borderRadius:10,
+                padding:"14px 16px",minWidth:280,boxShadow:"0 8px 32px rgba(0,0,0,0.7)"}}>
+              {/* Portfolio filter */}
+              <div style={{marginBottom:12}}>
+                <div style={{fontSize:8,color:C.cyan,fontFamily:"'JetBrains Mono',monospace",letterSpacing:"0.15em",marginBottom:6}}>PORTFOLIO</div>
+                <label style={{display:"flex",alignItems:"center",gap:6,marginBottom:4,cursor:"pointer"}}>
+                  <input type="checkbox" checked={selPorts.has("all")} onChange={()=>setSelPorts(new Set(["all"]))} style={{accentColor:C.cyan}}/>
+                  <span style={{fontSize:10,color:selPorts.has("all")?C.text:C.muted}}>All Portfolios</span>
+                </label>
+                {activePorts.map(p=>(
+                  <label key={p.id} style={{display:"flex",alignItems:"center",gap:6,marginBottom:4,cursor:"pointer"}}>
+                    <input type="checkbox" checked={selPorts.has(p.id)} onChange={()=>toggleSet(setSelPorts,p.id)} style={{accentColor:p.color}}/>
+                    <span style={{fontSize:10,color:selPorts.has(p.id)?C.text:C.muted}}>{p.name}</span>
+                  </label>
+                ))}
+              </div>
+              {/* Space filter */}
+              <div style={{marginBottom:12}}>
+                <div style={{fontSize:8,color:C.purple,fontFamily:"'JetBrains Mono',monospace",letterSpacing:"0.15em",marginBottom:6}}>SPACE</div>
+                <label style={{display:"flex",alignItems:"center",gap:6,marginBottom:4,cursor:"pointer"}}>
+                  <input type="checkbox" checked={selSpaces.has("all")} onChange={()=>setSelSpaces(new Set(["all"]))} style={{accentColor:C.cyan}}/>
+                  <span style={{fontSize:10,color:selSpaces.has("all")?C.text:C.muted}}>All Spaces</span>
+                </label>
+                {filteredSpaces.map(s=>(
+                  <label key={s.id} style={{display:"flex",alignItems:"center",gap:6,marginBottom:4,cursor:"pointer"}}>
+                    <input type="checkbox" checked={selSpaces.has(s.id)} onChange={()=>toggleSet(setSelSpaces,s.id)} style={{accentColor:s.portColor}}/>
+                    <span style={{fontSize:10,color:selSpaces.has(s.id)?C.text:C.muted}}>{s.portName} / {s.name}</span>
+                  </label>
+                ))}
+              </div>
+              {/* Project filter */}
+              <div style={{marginBottom:8}}>
+                <div style={{fontSize:8,color:C.teal,fontFamily:"'JetBrains Mono',monospace",letterSpacing:"0.15em",marginBottom:6}}>PROJECT</div>
+                <label style={{display:"flex",alignItems:"center",gap:6,marginBottom:4,cursor:"pointer"}}>
+                  <input type="checkbox" checked={selProjs.has("all")} onChange={()=>setSelProjs(new Set(["all"]))} style={{accentColor:C.cyan}}/>
+                  <span style={{fontSize:10,color:selProjs.has("all")?C.text:C.muted}}>All Projects</span>
+                </label>
+                {allProjects.map(pr=>(
+                  <label key={pr.id} style={{display:"flex",alignItems:"center",gap:6,marginBottom:4,cursor:"pointer"}}>
+                    <input type="checkbox" checked={selProjs.has(pr.id)} onChange={()=>toggleSet(setSelProjs,pr.id)} style={{accentColor:pr.color||C.cyan}}/>
+                    <span style={{fontSize:10,color:selProjs.has(pr.id)?C.text:C.muted}}>{pr.spaceName} / {pr.name}</span>
+                  </label>
+                ))}
+              </div>
+              <button onClick={()=>{setSelPorts(new Set(["all"]));setSelSpaces(new Set(["all"]));setSelProjs(new Set(["all"]));}}
+                style={{...St.ghost,fontSize:9,padding:"4px 10px",color:C.dim,width:"100%",marginTop:4}}>Reset Filters</button>
+            </div>
+          )}
+        </div>
         <div style={{flex:1}}/>
         <div style={{display:"flex",gap:5,alignItems:"center",background:C.card,border:`1px solid ${C.border}`,borderRadius:7,padding:"4px 10px"}}>
           <span style={St.lbl}>FROM</span>
@@ -1718,13 +1891,18 @@ function GanttTab({portfolios}){
 function CapacityTab({portfolios}){
   const [rangeW,setRangeW]   = useState(1);
   const [weekOff,setWeekOff] = useState(0);
-  const [filterSpId,setFilterSpId] = useState("all");
-  const [dayDetail,setDayDetail]   = useState(null); // date string when open
+  const [filterPortId,setFilterPortId] = useState("all");
+  const [filterSpId,setFilterSpId]   = useState("all");
+  const [dayDetail,setDayDetail]     = useState(null); // date string when open
   const CAP=8;
 
-  const allSpaces = useMemo(()=>
-    portfolios.flatMap(p=>p.spaces.filter(s=>!s.archived).map(s=>({...s,portColor:p.color,portName:p.name})))
-  ,[portfolios]);
+  const activePorts  = useMemo(()=>portfolios.filter(p=>!p.archived),[portfolios]);
+  const allSpaces    = useMemo(()=>
+    activePorts.flatMap(p=>p.spaces.filter(s=>!s.archived).map(s=>({...s,portColor:p.color,portName:p.name,portId:p.id})))
+  ,[activePorts]);
+  const filteredSpaces = useMemo(()=>
+    filterPortId==="all" ? allSpaces : allSpaces.filter(s=>s.portId===filterPortId)
+  ,[filterPortId,allSpaces]);
 
   const weekDates = useMemo(()=>{
     const arr=[]; const base=new Date(TODAY); const dow=base.getDay();
@@ -1737,9 +1915,9 @@ function CapacityTab({portfolios}){
 
   const capRows = useMemo(()=>{
     const rows=[];
-    portfolios.forEach(po=>{
-      po.spaces.filter(s=>!s.archived).forEach(sp=>{
+    filteredSpaces.forEach(sp=>{
         if(filterSpId!=="all"&&sp.id!==filterSpId) return;
+        const po={color:sp.portColor};
         sp.projects.filter(pr=>!pr.archived).forEach(pr=>{
           const activeTasks=(pr.tasks||[]).filter(t=>!t.archived);
           if(!activeTasks.length) return;
@@ -1761,10 +1939,9 @@ function CapacityTab({portfolios}){
           projRow.start=pr.start; projRow.end=pr.end;
           rows.push(projRow);
         });
-      });
     });
     return rows;
-  },[portfolios,filterSpId]);
+  },[filteredSpaces,filterSpId]);
 
   const getDayLoad=(item,d)=>{
     const ds=fmtD(d);
@@ -1850,10 +2027,15 @@ function CapacityTab({portfolios}){
       })()}
 
       <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:16,flexWrap:"wrap"}}>
+        <select value={filterPortId} onChange={e=>{setFilterPortId(e.target.value);setFilterSpId("all");}}
+          style={{...St.inp,width:"auto",padding:"5px 9px",fontSize:10}}>
+          <option value="all">All Portfolios</option>
+          {activePorts.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
+        </select>
         <select value={filterSpId} onChange={e=>setFilterSpId(e.target.value)}
           style={{...St.inp,width:"auto",padding:"5px 9px",fontSize:10}}>
           <option value="all">All Spaces</option>
-          {allSpaces.map(s=><option key={s.id} value={s.id}>{s.portName} > {s.name}</option>)}
+          {filteredSpaces.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}
         </select>
         <div style={{display:"flex",gap:3}}>
           {[1,2,4].map(w=><button key={w} onClick={()=>setRangeW(w)}
@@ -2103,33 +2285,82 @@ function CalendarTab({portfolios}){
       {/* Day detail popover */}
       {selectedDay&&(()=>{
         const ds=selectedDay;
-        const dayEvs=[...events.filter(e=>e.date===ds),...portfolioEvents.filter(e=>e.date===ds)];
+        const myEvs=events.filter(e=>e.date===ds);
+        const portEvs=portfolioEvents.filter(e=>e.date===ds);
+        const dayEvs=[...myEvs,...portEvs];
+        const exportable=dayEvs.filter(e=>!e.isPortfolio);
         return (
           <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",zIndex:500,display:"flex",alignItems:"center",justifyContent:"center"}}
             onClick={()=>setSelectedDay(null)}>
-            <div onClick={e=>e.stopPropagation()} style={{background:"#0d1525",border:`1px solid ${C.border}`,borderRadius:14,padding:22,minWidth:320,maxWidth:440,maxHeight:"70vh",overflow:"auto",boxShadow:"0 8px 48px rgba(0,0,0,0.8)"}}>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
-                <div style={{fontSize:16,fontWeight:800,color:C.text,fontFamily:"'Syne',sans-serif"}}>
-                  {new Date(ds+"T12:00:00").toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric"})}
+            <div onClick={e=>e.stopPropagation()} style={{background:"#0d1525",border:`1px solid ${C.border}`,borderRadius:14,padding:22,minWidth:340,maxWidth:480,maxHeight:"80vh",overflow:"auto",boxShadow:"0 8px 48px rgba(0,0,0,0.8)"}}>
+              {/* Header */}
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+                <div>
+                  <div style={{fontSize:16,fontWeight:800,color:C.text,fontFamily:"'Syne',sans-serif"}}>
+                    {new Date(ds+"T12:00:00").toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric"})}
+                  </div>
+                  <div style={{fontSize:9,color:C.muted,fontFamily:"'JetBrains Mono',monospace",marginTop:2}}>
+                    {dayEvs.length} event{dayEvs.length!==1?"s":""} scheduled
+                  </div>
                 </div>
-                <button onClick={()=>setSelectedDay(null)} style={{background:"none",border:"none",color:C.muted,cursor:"pointer",fontSize:20}}>x</button>
+                <button onClick={()=>setSelectedDay(null)} style={{background:"none",border:"none",color:C.muted,cursor:"pointer",fontSize:20,lineHeight:1}}>x</button>
               </div>
-              {!dayEvs.length&&<div style={{color:C.muted,fontSize:11,fontFamily:"'JetBrains Mono',monospace",textAlign:"center",padding:"16px 0"}}>Nothing scheduled.</div>}
-              {dayEvs.map(ev=>(
-                <div key={ev.id} onClick={()=>{setSelectedDay(null);setSelectedEv(ev);}}
-                  style={{background:C.card2,border:`1px solid ${ev.projColor||typeC[ev.type]||C.border}44`,borderRadius:8,padding:"8px 12px",marginBottom:6,cursor:"pointer"}}>
-                  <div style={{fontSize:7,fontFamily:"'JetBrains Mono',monospace",color:ev.projColor||typeC[ev.type]||C.muted,marginBottom:2,textTransform:"uppercase",letterSpacing:"0.1em"}}>{ev.type}{ev.spaceName?` . ${ev.spaceName}`:""}</div>
-                  <div style={{fontSize:11,fontWeight:700,color:C.text}}>{ev.title}</div>
-                  {ev.projName&&<div style={{fontSize:9,color:C.dim,fontFamily:"'JetBrains Mono',monospace",marginTop:2}}>{ev.projName}</div>}
-                </div>
-              ))}
-              {dayEvs.filter(e=>!e.isPortfolio).length>0&&(
-                <div style={{borderTop:`1px solid ${C.border}`,marginTop:12,paddingTop:12,display:"flex",gap:6}}>
-                  <button onClick={()=>{exportGCal(dayEvs[0]);}} style={{...St.ghost,flex:1,fontSize:9,padding:"5px 8px",color:C.cyan}}>Cal GCal</button>
-                  <button onClick={()=>{exportOutlookWeb(dayEvs[0]);}} style={{...St.ghost,flex:1,fontSize:9,padding:"5px 8px",color:C.purple}}>Mail Outlook</button>
-                  <button onClick={()=>downloadICS(dayEvs.filter(e=>!e.isPortfolio),`cal_${ds}.ics`)} style={{...St.ghost,flex:1,fontSize:9,padding:"5px 8px",color:C.teal}}>File .ics</button>
+
+              {/* Export ALL day events */}
+              {exportable.length>0&&(
+                <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:8,padding:"10px 12px",marginBottom:14}}>
+                  <div style={{fontSize:8,color:C.cyan,fontFamily:"'JetBrains Mono',monospace",letterSpacing:"0.15em",marginBottom:8}}>EXPORT ALL {exportable.length} EVENT{exportable.length!==1?"S":""}</div>
+                  <div style={{display:"flex",gap:6}}>
+                    <button onClick={()=>exportable.forEach(e=>exportGCal(e))}
+                      style={{...St.ghost,flex:1,fontSize:9,padding:"6px 8px",color:C.cyan,borderColor:`${C.cyan}44`}}>
+                      + Google Cal
+                    </button>
+                    <button onClick={()=>exportable.forEach(e=>exportOutlookWeb(e))}
+                      style={{...St.ghost,flex:1,fontSize:9,padding:"6px 8px",color:C.purple,borderColor:`${C.purple}44`}}>
+                      + Outlook
+                    </button>
+                    <button onClick={()=>downloadICS(exportable,`day_${ds}.ics`)}
+                      style={{...St.ghost,flex:1,fontSize:9,padding:"6px 8px",color:C.teal,borderColor:`${C.teal}44`}}>
+                      v .ics all
+                    </button>
+                  </div>
                 </div>
               )}
+
+              {/* Event list */}
+              {!dayEvs.length&&<div style={{color:C.muted,fontSize:11,fontFamily:"'JetBrains Mono',monospace",textAlign:"center",padding:"16px 0"}}>Nothing scheduled.</div>}
+              {dayEvs.map(ev=>(
+                <div key={ev.id}
+                  style={{background:C.card2,border:`1px solid ${ev.projColor||typeC[ev.type]||C.border}44`,borderRadius:8,marginBottom:8,overflow:"hidden"}}>
+                  {/* Event info row - click to open detail */}
+                  <div onClick={()=>{setSelectedDay(null);setSelectedEv(ev);}}
+                    style={{padding:"9px 12px",cursor:"pointer"}}>
+                    <div style={{fontSize:7,fontFamily:"'JetBrains Mono',monospace",color:ev.projColor||typeC[ev.type]||C.muted,marginBottom:2,textTransform:"uppercase",letterSpacing:"0.1em"}}>
+                      {ev.type}{ev.spaceName?` / ${ev.spaceName}`:""}
+                      {ev.isPortfolio&&<span style={{color:C.dim}}> [from data]</span>}
+                    </div>
+                    <div style={{fontSize:12,fontWeight:700,color:C.text}}>{ev.title}</div>
+                    {ev.projName&&<div style={{fontSize:9,color:C.dim,fontFamily:"'JetBrains Mono',monospace",marginTop:2}}>{ev.projName}</div>}
+                  </div>
+                  {/* Per-event export buttons */}
+                  {!ev.isPortfolio&&(
+                    <div style={{display:"flex",borderTop:`1px solid ${C.border}22`,padding:"5px 8px",gap:4,background:"rgba(0,0,0,0.2)"}}>
+                      <button onClick={e=>{e.stopPropagation();exportGCal(ev);}}
+                        style={{background:"none",border:"none",color:C.cyan,cursor:"pointer",fontSize:9,fontFamily:"'JetBrains Mono',monospace",padding:"2px 6px",borderRadius:4}}>
+                        + GCal
+                      </button>
+                      <button onClick={e=>{e.stopPropagation();exportOutlookWeb(ev);}}
+                        style={{background:"none",border:"none",color:C.purple,cursor:"pointer",fontSize:9,fontFamily:"'JetBrains Mono',monospace",padding:"2px 6px",borderRadius:4}}>
+                        + Outlook
+                      </button>
+                      <button onClick={e=>{e.stopPropagation();downloadICS([ev],`${ev.title.replace(/\s+/g,"_")}.ics`);}}
+                        style={{background:"none",border:"none",color:C.teal,cursor:"pointer",fontSize:9,fontFamily:"'JetBrains Mono',monospace",padding:"2px 6px",borderRadius:4}}>
+                        v .ics
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ))}
             </div>
           </div>
         );
