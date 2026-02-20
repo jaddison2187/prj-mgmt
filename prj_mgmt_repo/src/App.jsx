@@ -1,4 +1,4 @@
-// v10.3
+// v10.4
 import React, { useState, useMemo, useRef, useCallback, useEffect } from "react";
 
 /* ==========================================================
@@ -1294,12 +1294,12 @@ function SpacesTab({spaces,setSpaces,searchQ}){
     ask("Archive project?","Hidden from view but fully recoverable.",
       ()=>{ updProj(sid,prid,()=>({archived:true})); if(activeProjId===prid)setActiveProjId(null); setConfirm(null); });
   };
-  const deletePortfolio  = sid => ask(""Delete portfolio?"","Permanently removes this portfolio and ALL its projects, tasks, and subtasks.",
+  const deletePortfolio  = sid => ask("Delete portfolio?","Permanently removes this portfolio and ALL its projects, tasks, and subtasks.",
     ()=>{ updSpace(p=>({portfolios:p.portfolios.filter(s=>s.id!==sid)})); if(activePortId===sid){setActivePortId(null);setActiveProjId(null);} setConfirm(null); });
   const archivePortfolio = sid => {
     const sp=port?.portfolios.find(s=>s.id===sid);
     if(sp?.archived){ updPortfolio(sid,()=>({archived:false})); return; }
-    ask(""Archive portfolio?"","Hides this portfolio. Projects preserved.",
+    ask("Archive portfolio?","Hides this portfolio. Projects preserved.",
       ()=>{ updPortfolio(sid,()=>({archived:true})); if(activePortId===sid){setActivePortId(null);setActiveProjId(null);} setConfirm(null); });
   };
   const copyPortfolio    = sid => { const sp=port?.portfolios.find(s=>s.id===sid); if(sp) setClipboard({type:"space",item:sp}); };
