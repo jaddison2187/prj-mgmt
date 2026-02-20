@@ -344,7 +344,7 @@ function DataManager({portfolios, setPortfolios, onClose, onGistSave, gistStatus
             </div>
             <button onClick={()=>saveSettingsAndClose({...settings})}
               style={{...St.btn,width:"100%",marginBottom:12,padding:"9px",fontSize:11}}>
-              💾 Save Settings
+              [save] Save Settings
             </button>
 
             {/* Push / Pull */}
@@ -368,7 +368,7 @@ function DataManager({portfolios, setPortfolios, onClose, onGistSave, gistStatus
             </div>
 
             <div style={{marginTop:14,padding:"10px 13px",background:`${C.yellow}0d`,border:`1px solid ${C.yellow}22`,borderRadius:8,fontSize:9,color:C.yellow,fontFamily:"'JetBrains Mono',monospace",lineHeight:1.6}}>
-              💡 Your token is stored only in this browser's localStorage — never sent anywhere except directly to api.github.com. Gist revision history gives you a full data changelog.
+              [tip] Your token is stored only in this browser's localStorage — never sent anywhere except directly to api.github.com. Gist revision history gives you a full data changelog.
             </div>
           </>}
 
@@ -598,7 +598,7 @@ function TagPicker({tags,onChange}){
 }
 function DriftPanel({proj}){
   const drift = useMemo(()=>computeDrift(proj),[proj]);
-  if(!drift) return <div style={{padding:"24px",textAlign:"center",color:C.muted,fontFamily:"'JetBrains Mono',monospace",fontSize:11}}>No baseline snapshot yet. Take a 📸 Snapshot first.</div>;
+  if(!drift) return <div style={{padding:"24px",textAlign:"center",color:C.muted,fontFamily:"'JetBrains Mono',monospace",fontSize:11}}>No baseline snapshot yet. Take a [snap] Snapshot first.</div>;
   if(!drift.length) return <div style={{padding:"24px",textAlign:"center",color:C.muted,fontSize:11}}>No active tasks to compare.</div>;
   const slipped=drift.filter(d=>d.endDrift>2),behind=drift.filter(d=>d.progGap<-10),atRisk=drift.filter(d=>d.daysLeft>=0&&d.daysLeft<14&&d.currentProg<90),onTrack=drift.filter(d=>d.endDrift<=2&&d.progGap>=-10);
   return <div style={{padding:"14px 16px"}}>
@@ -709,11 +709,11 @@ function SubRow({sub,taskId,portColor,onUpdSub,dragIdx,index,onReorderSubs,onDel
         <div style={{display:"relative"}} onClick={e=>e.stopPropagation()}>
           <button onClick={()=>setCtxMenu(m=>!m)} style={{background:"none",border:`1px solid ${C.border}33`,borderRadius:4,color:C.dim,cursor:"pointer",fontSize:11,padding:"0 5px",lineHeight:1.4}}>⋯</button>
           {ctxMenu&&<CtxMenu onClose={()=>setCtxMenu(false)} items={[
-            {icon:"📋",label:"Copy Subtask",fn:()=>onCopySub(sub)},
+            {icon:"≡",label:"Copy Subtask",fn:()=>onCopySub(sub)},
             "---",
             {icon:sub.flagged?"⚑":"⚐",label:sub.flagged?"Unflag":"Flag",fn:()=>onUpdSub(sub.id,()=>({flagged:!sub.flagged}))},
             {icon:sub.archived?"↩":"▽",label:sub.archived?"Restore":"Archive",fn:()=>onArchive(sub.id)},
-            {icon:"🗑",label:"Delete",danger:true,fn:()=>onDelete(sub.id)},
+            {icon:"✕",label:"Delete",danger:true,fn:()=>onDelete(sub.id)},
           ]}/>
         </div>
         <ActionBtns archived={sub.archived} onArchive={()=>onArchive(sub.id)} onDelete={()=>onDelete(sub.id)} size={9}/>
@@ -778,12 +778,12 @@ function TaskRow({task,portColor,onUpdTask,onUpdSub,onAddSub,taskDragIdx,taskInd
           <div style={{position:"relative"}} onClick={e=>e.stopPropagation()}>
             <button onClick={()=>setCtxMenu(m=>!m)} style={{background:"none",border:`1px solid ${C.border}33`,borderRadius:4,color:C.dim,cursor:"pointer",fontSize:11,padding:"0 5px",lineHeight:1.4}}>⋯</button>
             {ctxMenu&&<CtxMenu onClose={()=>setCtxMenu(false)} items={[
-              {icon:"📋",label:"Copy Task",fn:()=>onCopyTask(task)},
+              {icon:"≡",label:"Copy Task",fn:()=>onCopyTask(task)},
               {icon:"+ ↓",label:"Add Subtask",fn:()=>{onAddSub(task.id);setExp(true);}},
               "---",
               {icon:task.flagged?"⚑":"⚐",label:task.flagged?"Unflag":"Flag",fn:()=>onUpdTask(task.id,()=>({flagged:!task.flagged}))},
               {icon:task.archived?"↩":"▽",label:task.archived?"Restore":"Archive",fn:()=>onArchiveTask(task.id)},
-              {icon:"🗑",label:"Delete",danger:true,fn:()=>onDeleteTask(task.id)},
+              {icon:"✕",label:"Delete",danger:true,fn:()=>onDeleteTask(task.id)},
             ]}/>
           </div>
           <ActionBtns archived={task.archived} onArchive={()=>onArchiveTask(task.id)} onDelete={()=>onDeleteTask(task.id)}/>
@@ -906,7 +906,7 @@ function ProjectDetail({proj,portColor,spaceName,onUpdate,onUpdTask,onUpdSub,onA
         <div style={{flex:1}}/>
         <button onClick={onBaseline}
           style={{...St.ghost,margin:"4px 12px 4px 0",padding:"3px 10px",fontSize:9,
-            color:C.yellow,borderColor:`${C.yellow}44`,whiteSpace:"nowrap"}}>📸 Snapshot</button>
+            color:C.yellow,borderColor:`${C.yellow}44`,whiteSpace:"nowrap"}}>[snap] Snapshot</button>
       </div>
 
       {/* TASKS */}
@@ -951,7 +951,7 @@ function ProjectDetail({proj,portColor,spaceName,onUpdate,onUpdTask,onUpdSub,onA
             <button onClick={onAddTask} style={{...St.ghost,flex:1,fontSize:10}}>+ Add Task</button>
             {clipboard?.type==="task"&&<button onClick={onPasteTask}
               style={{...St.ghost,padding:"6px 12px",fontSize:10,color:C.yellow,borderColor:`${C.yellow}44`}}>
-              📋 Paste Task "{clipboard.item.name}"
+              [copy] Paste Task "{clipboard.item.name}"
             </button>}
           </div>
         </div>
@@ -963,14 +963,14 @@ function ProjectDetail({proj,portColor,spaceName,onUpdate,onUpdTask,onUpdSub,onA
         <div style={{padding:"12px 16px"}}>
           {!proj.baselines?.length&&(
             <div style={{color:C.muted,fontSize:11,fontFamily:"'JetBrains Mono',monospace",padding:"22px 0",textAlign:"center"}}>
-              No snapshots yet — click 📸 Snapshot to save the current schedule.
+              No snapshots yet — click [snap] Snapshot to save the current schedule.
             </div>
           )}
           {(proj.baselines||[]).map(bl=>(
             <div key={bl.id} style={{background:C.card2,border:`1px solid ${C.border}`,borderRadius:8,marginBottom:8,overflow:"hidden"}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"9px 13px",cursor:"pointer"}}
                 onClick={()=>setShowBlId(showBlId===bl.id?null:bl.id)}>
-                <span style={{fontSize:11,color:C.yellow,fontFamily:"'JetBrains Mono',monospace",fontWeight:700}}>📸 {bl.label}</span>
+                <span style={{fontSize:11,color:C.yellow,fontFamily:"'JetBrains Mono',monospace",fontWeight:700}}>[snap] {bl.label}</span>
                 <span style={{fontSize:9,color:C.muted}}>{showBlId===bl.id?"▾":"▸"} {bl.snapshot.length} tasks</span>
               </div>
               <Collapse open={showBlId===bl.id}>
@@ -1159,7 +1159,7 @@ function SpacesTab({portfolios,setPortfolios,searchQ}){
         {/* Clipboard indicator */}
         {clipboard&&(
           <div style={{background:`${C.yellow}15`,border:`1px solid ${C.yellow}44`,borderRadius:7,padding:"6px 10px",marginBottom:8,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-            <span style={{fontSize:9,color:C.yellow,fontFamily:"'JetBrains Mono',monospace"}}>📋 {clipboard.type}: "{clipboard.item.name}"</span>
+            <span style={{fontSize:9,color:C.yellow,fontFamily:"'JetBrains Mono',monospace"}}>[copy] {clipboard.type}: "{clipboard.item.name}"</span>
             <button onClick={()=>setClipboard(null)} style={{background:"none",border:"none",color:C.dim,cursor:"pointer",fontSize:11}}>×</button>
           </div>
         )}
@@ -1212,11 +1212,11 @@ function SpacesTab({portfolios,setPortfolios,searchQ}){
                       style={{background:"none",border:`1px solid ${C.border}`,borderRadius:5,color:C.muted,cursor:"pointer",fontSize:12,padding:"1px 6px",lineHeight:1.2}}>⋯</button>
                     {spMenu===sp.id&&(
                       <CtxMenu onClose={()=>setSpMenu(null)} items={[
-                        {icon:"+ 📁",label:"Add Project",fn:()=>{addProject(sp.id);setCollapsedSp(s=>({...s,[sp.id]:false}));}},
-                        clipboard?.type==="project"?{icon:"📋",label:`Paste "${clipboard.item.name}"`,fn:()=>pasteProject(sp.id)}:"---",
+                        {icon:"+ ▸",label:"Add Project",fn:()=>{addProject(sp.id);setCollapsedSp(s=>({...s,[sp.id]:false}));}},
+                        clipboard?.type==="project"?{icon:"≡",label:`Paste "${clipboard.item.name}"`,fn:()=>pasteProject(sp.id)}:"---",
                         "---",
                         {icon:sp.archived?"↩":"▽",label:sp.archived?"Restore Space":"Archive Space",fn:()=>archiveSpace(sp.id)},
-                        {icon:"🗑",label:"Delete Space",danger:true,fn:()=>deleteSpace(sp.id)},
+                        {icon:"✕",label:"Delete Space",danger:true,fn:()=>deleteSpace(sp.id)},
                       ].filter(Boolean)}/>
                     )}
                   </div>
@@ -1250,11 +1250,11 @@ function SpacesTab({portfolios,setPortfolios,searchQ}){
                                   style={{background:"none",border:`1px solid ${C.border}`,borderRadius:5,color:C.muted,cursor:"pointer",fontSize:12,padding:"1px 6px",lineHeight:1.2}}>⋯</button>
                                 {prMenu===pr.id&&(
                                   <CtxMenu onClose={()=>setPrMenu(null)} items={[
-                                    {icon:"📋",label:"Copy Project",fn:()=>copyProject(pr)},
+                                    {icon:"≡",label:"Copy Project",fn:()=>copyProject(pr)},
                                     {icon:"⚑",label:pr.flagged?"Unflag":"Flag",fn:()=>updProj(sp.id,pr.id,()=>({flagged:!pr.flagged}))},
                                     "---",
                                     {icon:pr.archived?"↩":"▽",label:pr.archived?"Restore":"Archive",fn:()=>archiveProject(sp.id,pr.id)},
-                                    {icon:"🗑",label:"Delete Project",danger:true,fn:()=>deleteProject(sp.id,pr.id)},
+                                    {icon:"✕",label:"Delete Project",danger:true,fn:()=>deleteProject(sp.id,pr.id)},
                                   ]}/>
                                 )}
                                 </div>
@@ -1662,7 +1662,7 @@ function GanttTab({portfolios}){
             <span key={l} style={{fontSize:8,fontFamily:"'JetBrains Mono',monospace",color:c}}>{l}</span>
           ))}
           <span style={{marginLeft:"auto",fontSize:8,fontFamily:"'JetBrains Mono',monospace",color:C.dim}}>
-            🖱 scroll=zoom  drag=pan  ‹›=jump half-range
+            [mouse] scroll=zoom  drag=pan  ‹›=jump half-range
           </span>
         </div>
       </div>
@@ -2041,18 +2041,18 @@ function CalendarTab({portfolios}){
             {!selectedEv.isPortfolio&&(
               <div style={{display:"flex",flexDirection:"column",gap:6,marginBottom:16}}>
                 <button onClick={()=>{exportGCal(selectedEv);setSelectedEv(null);}} style={{...St.ghost,display:"flex",alignItems:"center",gap:8,justifyContent:"flex-start",padding:"9px 12px",fontSize:11,color:C.text,borderColor:C.border}}>
-                  <span style={{fontSize:15}}>📅</span> Add to Google Calendar
+                  <span style={{fontSize:15}}>[cal]</span> Add to Google Calendar
                 </button>
                 <button onClick={()=>{exportOutlookWeb(selectedEv);setSelectedEv(null);}} style={{...St.ghost,display:"flex",alignItems:"center",gap:8,justifyContent:"flex-start",padding:"9px 12px",fontSize:11,color:C.text,borderColor:C.border}}>
-                  <span style={{fontSize:15}}>📧</span> Add to Outlook Web
+                  <span style={{fontSize:15}}>[mail]</span> Add to Outlook Web
                 </button>
                 <button onClick={()=>{downloadICS([selectedEv],`${selectedEv.title.replace(/\s+/g,"_")}.ics`);setSelectedEv(null);}} style={{...St.ghost,display:"flex",alignItems:"center",gap:8,justifyContent:"flex-start",padding:"9px 12px",fontSize:11,color:C.text,borderColor:C.border}}>
-                  <span style={{fontSize:15}}>📁</span> Download .ics file
+                  <span style={{fontSize:15}}>[file]</span> Download .ics file
                 </button>
               </div>
             )}
             {!selectedEv.isPortfolio&&<div style={{borderTop:`1px solid ${C.border}`,paddingTop:12,display:"flex",justifyContent:"flex-end"}}>
-              <button onClick={()=>{setEvents(p=>p.filter(x=>x.id!==selectedEv.id));setSelectedEv(null);}} style={{background:"none",border:`1px solid ${C.red}44`,borderRadius:6,cursor:"pointer",color:C.red,padding:"4px 10px",fontSize:10,fontFamily:"'JetBrains Mono',monospace"}}>🗑 Delete</button>
+              <button onClick={()=>{setEvents(p=>p.filter(x=>x.id!==selectedEv.id));setSelectedEv(null);}} style={{background:"none",border:`1px solid ${C.red}44`,borderRadius:6,cursor:"pointer",color:C.red,padding:"4px 10px",fontSize:10,fontFamily:"'JetBrains Mono',monospace"}}>[del] Delete</button>
             </div>}
           </div>
         </div>
@@ -2083,9 +2083,9 @@ function CalendarTab({portfolios}){
               ))}
               {dayEvs.filter(e=>!e.isPortfolio).length>0&&(
                 <div style={{borderTop:`1px solid ${C.border}`,marginTop:12,paddingTop:12,display:"flex",gap:6}}>
-                  <button onClick={()=>{exportGCal(dayEvs[0]);}} style={{...St.ghost,flex:1,fontSize:9,padding:"5px 8px",color:C.cyan}}>📅 GCal</button>
-                  <button onClick={()=>{exportOutlookWeb(dayEvs[0]);}} style={{...St.ghost,flex:1,fontSize:9,padding:"5px 8px",color:C.purple}}>📧 Outlook</button>
-                  <button onClick={()=>downloadICS(dayEvs.filter(e=>!e.isPortfolio),`cal_${ds}.ics`)} style={{...St.ghost,flex:1,fontSize:9,padding:"5px 8px",color:C.teal}}>📁 .ics</button>
+                  <button onClick={()=>{exportGCal(dayEvs[0]);}} style={{...St.ghost,flex:1,fontSize:9,padding:"5px 8px",color:C.cyan}}>[cal] GCal</button>
+                  <button onClick={()=>{exportOutlookWeb(dayEvs[0]);}} style={{...St.ghost,flex:1,fontSize:9,padding:"5px 8px",color:C.purple}}>[mail] Outlook</button>
+                  <button onClick={()=>downloadICS(dayEvs.filter(e=>!e.isPortfolio),`cal_${ds}.ics`)} style={{...St.ghost,flex:1,fontSize:9,padding:"5px 8px",color:C.teal}}>[file] .ics</button>
                 </div>
               )}
             </div>
