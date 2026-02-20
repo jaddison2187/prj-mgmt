@@ -1,4 +1,4 @@
-// v8.0
+// v8.1
 import React, { useState, useMemo, useRef, useCallback, useEffect } from "react";
 
 /* ==========================================================
@@ -1579,9 +1579,9 @@ function GanttTab({portfolios}){
       {/* Controls row 2: Year + Q + Zoom + Nav */}
       <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:12,flexWrap:"wrap"}}>
         <div style={{display:"flex",alignItems:"center",gap:4,background:C.card2,border:`1px solid ${C.border}`,borderRadius:7,padding:"3px 8px"}}>
-          <button onClick={()=>setGanttYear(y=>y-1)} style={{background:"none",border:"none",color:C.muted,cursor:"pointer",fontSize:11,padding:"0 2px"}}><</button>
+          <button onClick={()=>setGanttYear(y=>y-1)} style={{background:"none",border:"none",color:C.muted,cursor:"pointer",fontSize:11,padding:"0 2px"}}>&lt;</button>
           <span style={{fontSize:11,fontWeight:700,color:C.text,fontFamily:"'JetBrains Mono',monospace",minWidth:36,textAlign:"center"}}>{ganttYear}</span>
-          <button onClick={()=>setGanttYear(y=>y+1)} style={{background:"none",border:"none",color:C.muted,cursor:"pointer",fontSize:11,padding:"0 2px"}}>></button>
+          <button onClick={()=>setGanttYear(y=>y+1)} style={{background:"none",border:"none",color:C.muted,cursor:"pointer",fontSize:11,padding:"0 2px"}}>&gt;</button>
         </div>
         <div style={{display:"flex",gap:3}}>
           {QS.map((q,qi)=>{
@@ -1603,7 +1603,7 @@ function GanttTab({portfolios}){
               borderColor:Math.abs(z.d-totalDays)<5?C.teal:C.border,
               color:Math.abs(z.d-totalDays)<5?C.teal:C.muted}}>{z.l}</button>)}
         </div>
-        <button onClick={()=>setRangeStart(s=>addD(s,-Math.round(totalDays*0.5)))} style={{...St.ghost,padding:"4px 9px"}}><</button>
+        <button onClick={()=>setRangeStart(s=>addD(s,-Math.round(totalDays*0.5)))} style={{...St.ghost,padding:"4px 9px"}}>&lt;</button>
         <button onClick={resetView} style={{...St.ghost,padding:"4px 9px",color:C.cyan,borderColor:`${C.cyan}55`}}>Today</button>
         <button onClick={()=>setRangeStart(s=>addD(s,Math.round(totalDays*0.5)))} style={{...St.ghost,padding:"4px 9px"}}>></button>
         <span style={{fontSize:9,fontFamily:"'JetBrains Mono',monospace",color:C.muted,marginLeft:4}}>
@@ -1859,7 +1859,7 @@ function CapacityTab({portfolios}){
           {[1,2,4].map(w=><button key={w} onClick={()=>setRangeW(w)}
             style={{...St.btn,background:rangeW===w?C.cyan:"#1a2236",color:rangeW===w?"#07090f":C.muted,padding:"5px 10px",fontSize:10}}>{w}W</button>)}
         </div>
-        <button onClick={()=>setWeekOff(o=>o-1)} style={{...St.ghost,padding:"5px 9px"}}><</button>
+        <button onClick={()=>setWeekOff(o=>o-1)} style={{...St.ghost,padding:"5px 9px"}}>&lt;</button>
         <button onClick={()=>setWeekOff(0)} style={{...St.ghost,padding:"5px 9px",color:C.cyan}}>This Week</button>
         <button onClick={()=>setWeekOff(o=>o+1)} style={{...St.ghost,padding:"5px 9px"}}>></button>
         <span style={{fontSize:9,fontFamily:"'JetBrains Mono',monospace",color:C.muted}}>
@@ -2144,7 +2144,7 @@ function CalendarTab({portfolios}){
 
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14,flexWrap:"wrap",gap:8}}>
         <div style={{display:"flex",gap:8,alignItems:"center"}}>
-          <button onClick={()=>setMonth(m=>{const n=new Date(m);n.setMonth(m.getMonth()-1);return n;})} style={{...St.ghost,padding:"5px 9px"}}><</button>
+          <button onClick={()=>setMonth(m=>{const n=new Date(m);n.setMonth(m.getMonth()-1);return n;})} style={{...St.ghost,padding:"5px 9px"}}>&lt;</button>
           <span style={{fontSize:17,fontWeight:800,color:C.text,fontFamily:"'Syne',sans-serif"}}>{month.toLocaleDateString("en-US",{month:"long",year:"numeric"})}</span>
           <button onClick={()=>setMonth(m=>{const n=new Date(m);n.setMonth(m.getMonth()+1);return n;})} style={{...St.ghost,padding:"5px 9px"}}>></button>
           <button onClick={()=>setMonth(new Date(TODAY.getFullYear(),TODAY.getMonth(),1))} style={{...St.ghost,padding:"5px 9px",color:C.cyan}}>Today</button>
