@@ -1,4 +1,4 @@
-// v10.6
+// v10.7
 import React, { useState, useMemo, useRef, useCallback, useEffect } from "react";
 
 /* ==========================================================
@@ -1373,7 +1373,7 @@ function SpacesTab({spaces,setSpaces,searchQ}){
               )}
             </div>
           ))}
-          <button onClick={addSpace} style={{...St.ghost,padding:"4px 9px",fontSize:9,color:C.teal,borderColor:`${C.teal}44`}}>+ Portfolio</button>
+          <button onClick={addSpace} style={{...St.ghost,padding:"4px 9px",fontSize:9,color:C.teal,borderColor:`${C.teal}44`,marginLeft:"auto"}}>+ Space</button>
         </div>
 
         {/* Portfolio summary bar */}
