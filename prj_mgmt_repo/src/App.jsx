@@ -1,4 +1,4 @@
-// v6.1
+// v8.0
 import React, { useState, useMemo, useRef, useCallback, useEffect } from "react";
 
 /* ==========================================================
@@ -744,6 +744,18 @@ function TaskRow({task,portColor,onUpdTask,onUpdSub,onAddSub,taskDragIdx,taskInd
   const activeSubs = (task.subtasks||[]).filter(s=>!s.archived);
   const archSubs   = (task.subtasks||[]).filter(s=>s.archived);
   const dragCtx    = React.useContext(DragCtx);
+  const taskFlagIcon  = task.flagged  ? "P" : "-";
+  const taskFlagLabel = task.flagged  ? "Unflag" : "Flag";
+  const taskArchIcon  = task.archived ? "^" : "v";
+  const taskArchLabel = task.archived ? "Restore" : "Archive";
+  const taskMenuItems = [
+    {icon:"=",label:"Copy Task",fn:()=>onCopyTask(task)},
+    {icon:"+ v",label:"Add Subtask",fn:()=>{onAddSub(task.id);setExp(true);}},
+    "---",
+    {icon:taskFlagIcon,label:taskFlagLabel,fn:()=>onUpdTask(task.id,()=>({flagged:!task.flagged}))},
+    {icon:taskArchIcon,label:taskArchLabel,fn:()=>onArchiveTask(task.id)},
+    {icon:"x",label:"Delete",danger:true,fn:()=>onDeleteTask(task.id)},
+  ];
 
   return (
     <SortableRow dragIdx={taskDragIdx} index={taskIndex} onReorder={onReorderTasks} style={{marginBottom:2}}>
@@ -787,14 +799,7 @@ function TaskRow({task,portColor,onUpdTask,onUpdSub,onAddSub,taskDragIdx,taskInd
           </select>
           <div style={{position:"relative"}} onClick={e=>e.stopPropagation()}>
             <button onClick={()=>setCtxMenu(m=>!m)} style={{background:"none",border:`1px solid ${C.border}33`,borderRadius:4,color:C.dim,cursor:"pointer",fontSize:11,padding:"0 5px",lineHeight:1.4}}>...</button>
-            {ctxMenu&&<CtxMenu onClose={()=>setCtxMenu(false)} items={[
-              {icon:"=",label:"Copy Task",fn:()=>onCopyTask(task)},
-              {icon:"+ v",label:"Add Subtask",fn:()=>{onAddSub(task.id);setExp(true);}},
-              "---",
-              {icon:task.flagged?"P":"?",label:task.flagged?"Unflag":"Flag",fn:()=>onUpdTask(task.id,()=>({flagged:!task.flagged}))},
-              {icon:task.archived?"?":"?",label:task.archived?"Restore":"Archive",fn:()=>onArchiveTask(task.id)},
-              {icon:"x",label:"Delete",danger:true,fn:()=>onDeleteTask(task.id)},
-            ]}/>
+            {ctxMenu && <CtxMenu onClose={()=>setCtxMenu(false)} items={taskMenuItems}/>}
           </div>
           <ActionBtns archived={task.archived} onArchive={()=>onArchiveTask(task.id)} onDelete={()=>onDeleteTask(task.id)}/>
         </div>
@@ -1025,6 +1030,35 @@ function ProjectDetail({proj,portColor,spaceName,onUpdate,onUpdTask,onUpdSub,onA
 /* ==========================================================
    SPACES TAB (renamed from Portfolios)
 ========================================================== */
+
+function SpaceCtxMenu({sp,clipboard,onAdd,onPaste,onArchive,onDelete,onClose}){
+  const pasteItem = clipboard && clipboard.type==="project"
+    ? {icon:"=",label:'Paste "'+clipboard.item.name+'"',fn:onPaste}
+    : null;
+  const archLabel = sp.archived ? "Restore Space" : "Archive Space";
+  const archIcon  = sp.archived ? "^" : "v";
+  const items = [{icon:"+ >",label:"Add Project",fn:onAdd}];
+  if(pasteItem) items.push(pasteItem);
+  items.push("---");
+  items.push({icon:archIcon,label:archLabel,fn:onArchive});
+  items.push({icon:"x",label:"Delete Space",danger:true,fn:onDelete});
+  return <CtxMenu onClose={onClose} items={items}/>;
+}
+
+function ProjCtxMenu({pr,sp,onCopy,onFlag,onArchive,onDelete,onClose}){
+  const flagLabel = pr.flagged  ? "Unflag" : "Flag";
+  const archLabel = pr.archived ? "Restore" : "Archive";
+  const archIcon  = pr.archived ? "^" : "v";
+  const items = [
+    {icon:"=",label:"Copy Project",fn:onCopy},
+    {icon:"P",label:flagLabel,fn:onFlag},
+    "---",
+    {icon:archIcon,label:archLabel,fn:onArchive},
+    {icon:"x",label:"Delete Project",danger:true,fn:onDelete},
+  ];
+  return <CtxMenu onClose={onClose} items={items}/>;
+}
+
 function SpacesTab({portfolios,setPortfolios,searchQ}){
   const [activePid,    setActivePid]    = useState(portfolios[0]?.id);
   const [activeSpId,   setActiveSpId]   = useState(null);
@@ -1221,13 +1255,12 @@ function SpacesTab({portfolios,setPortfolios,searchQ}){
                     <button onClick={e=>{e.stopPropagation();setSpMenu(spMenu===sp.id?null:sp.id);}}
                       style={{background:"none",border:`1px solid ${C.border}`,borderRadius:5,color:C.muted,cursor:"pointer",fontSize:12,padding:"1px 6px",lineHeight:1.2}}>...</button>
                     {spMenu===sp.id&&(
-                      <CtxMenu onClose={()=>setSpMenu(null)} items={[
-                        {icon:"+ >",label:"Add Project",fn:()=>{addProject(sp.id);setCollapsedSp(s=>({...s,[sp.id]:false}));}},
-                        clipboard?.type==="project"?{icon:"=",label:`Paste "${clipboard.item.name}"`,fn:()=>pasteProject(sp.id)}:"---",
-                        "---",
-                        {icon:sp.archived?"?":"?",label:sp.archived?"Restore Space":"Archive Space",fn:()=>archiveSpace(sp.id)},
-                        {icon:"x",label:"Delete Space",danger:true,fn:()=>deleteSpace(sp.id)},
-                      ].filter(Boolean)}/>
+                      <SpaceCtxMenu sp={sp} clipboard={clipboard}
+                        onAdd={()=>{addProject(sp.id);setCollapsedSp(s=>({...s,[sp.id]:false}));}}
+                        onPaste={()=>pasteProject(sp.id)}
+                        onArchive={()=>archiveSpace(sp.id)}
+                        onDelete={()=>deleteSpace(sp.id)}
+                        onClose={()=>setSpMenu(null)}/>
                     )}
                   </div>
                 </div>
@@ -1259,13 +1292,12 @@ function SpacesTab({portfolios,setPortfolios,searchQ}){
                                 <button onClick={e=>{e.stopPropagation();setPrMenu(prMenu===pr.id?null:pr.id);}}
                                   style={{background:"none",border:`1px solid ${C.border}`,borderRadius:5,color:C.muted,cursor:"pointer",fontSize:12,padding:"1px 6px",lineHeight:1.2}}>...</button>
                                 {prMenu===pr.id&&(
-                                  <CtxMenu onClose={()=>setPrMenu(null)} items={[
-                                    {icon:"=",label:"Copy Project",fn:()=>copyProject(pr)},
-                                    {icon:"P",label:pr.flagged?"Unflag":"Flag",fn:()=>updProj(sp.id,pr.id,()=>({flagged:!pr.flagged}))},
-                                    "---",
-                                    {icon:pr.archived?"?":"?",label:pr.archived?"Restore":"Archive",fn:()=>archiveProject(sp.id,pr.id)},
-                                    {icon:"x",label:"Delete Project",danger:true,fn:()=>deleteProject(sp.id,pr.id)},
-                                  ]}/>
+                                  <ProjCtxMenu pr={pr} sp={sp}
+                                    onCopy={()=>copyProject(pr)}
+                                    onFlag={()=>updProj(sp.id,pr.id,()=>({flagged:!pr.flagged}))}
+                                    onArchive={()=>archiveProject(sp.id,pr.id)}
+                                    onDelete={()=>deleteProject(sp.id,pr.id)}
+                                    onClose={()=>setPrMenu(null)}/>
                                 )}
                                 </div>
                               </div>
