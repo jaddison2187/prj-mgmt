@@ -1704,7 +1704,7 @@ function GanttTab({portfolios}){
             <span key={l} style={{fontSize:8,fontFamily:"'JetBrains Mono',monospace",color:c}}>{l}</span>
           ))}
           <span style={{marginLeft:"auto",fontSize:8,fontFamily:"'JetBrains Mono',monospace",color:C.dim}}>
-            scroll=zoom drag=pan scroll=zoom  drag=pan  <>=jump half-range
+            scroll=zoom  drag=pan  []=jump half-range
           </span>
         </div>
       </div>
