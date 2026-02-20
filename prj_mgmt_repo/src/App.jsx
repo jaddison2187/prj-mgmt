@@ -713,7 +713,7 @@ function SubRow({sub,taskId,portColor,onUpdSub,dragIdx,index,onReorderSubs,onDel
             "---",
             {icon:sub.flagged?"⚑":"⚐",label:sub.flagged?"Unflag":"Flag",fn:()=>onUpdSub(sub.id,()=>({flagged:!sub.flagged}))},
             {icon:sub.archived?"↩":"▽",label:sub.archived?"Restore":"Archive",fn:()=>onArchive(sub.id)},
-            {icon:"🗑",label:"Delete",danger:true,fn:()=>onDelete(sub.id)},
+            {icon:"del",label:"Delete",danger:true,fn:()=>onDelete(sub.id)},
           ]}/>
         </div>
         <ActionBtns archived={sub.archived} onArchive={()=>onArchive(sub.id)} onDelete={()=>onDelete(sub.id)} size={9}/>
@@ -783,7 +783,7 @@ function TaskRow({task,portColor,onUpdTask,onUpdSub,onAddSub,taskDragIdx,taskInd
               "---",
               {icon:task.flagged?"⚑":"⚐",label:task.flagged?"Unflag":"Flag",fn:()=>onUpdTask(task.id,()=>({flagged:!task.flagged}))},
               {icon:task.archived?"↩":"▽",label:task.archived?"Restore":"Archive",fn:()=>onArchiveTask(task.id)},
-              {icon:"🗑",label:"Delete",danger:true,fn:()=>onDeleteTask(task.id)},
+              {icon:"del",label:"Delete",danger:true,fn:()=>onDeleteTask(task.id)},
             ]}/>
           </div>
           <ActionBtns archived={task.archived} onArchive={()=>onArchiveTask(task.id)} onDelete={()=>onDeleteTask(task.id)}/>
@@ -1216,7 +1216,7 @@ function SpacesTab({portfolios,setPortfolios,searchQ}){
                         clipboard?.type==="project"?{icon:"📋",label:`Paste "${clipboard.item.name}"`,fn:()=>pasteProject(sp.id)}:"---",
                         "---",
                         {icon:sp.archived?"↩":"▽",label:sp.archived?"Restore Space":"Archive Space",fn:()=>archiveSpace(sp.id)},
-                        {icon:"🗑",label:"Delete Space",danger:true,fn:()=>deleteSpace(sp.id)},
+                        {icon:"del",label:"Delete Space",danger:true,fn:()=>deleteSpace(sp.id)},
                       ].filter(Boolean)}/>
                     )}
                   </div>
@@ -1254,7 +1254,7 @@ function SpacesTab({portfolios,setPortfolios,searchQ}){
                                     {icon:"⚑",label:pr.flagged?"Unflag":"Flag",fn:()=>updProj(sp.id,pr.id,()=>({flagged:!pr.flagged}))},
                                     "---",
                                     {icon:pr.archived?"↩":"▽",label:pr.archived?"Restore":"Archive",fn:()=>archiveProject(sp.id,pr.id)},
-                                    {icon:"🗑",label:"Delete Project",danger:true,fn:()=>deleteProject(sp.id,pr.id)},
+                                    {icon:"del",label:"Delete Project",danger:true,fn:()=>deleteProject(sp.id,pr.id)},
                                   ]}/>
                                 )}
                                 </div>
@@ -2052,7 +2052,7 @@ function CalendarTab({portfolios}){
               </div>
             )}
             {!selectedEv.isPortfolio&&<div style={{borderTop:`1px solid ${C.border}`,paddingTop:12,display:"flex",justifyContent:"flex-end"}}>
-              <button onClick={()=>{setEvents(p=>p.filter(x=>x.id!==selectedEv.id));setSelectedEv(null);}} style={{background:"none",border:`1px solid ${C.red}44`,borderRadius:6,cursor:"pointer",color:C.red,padding:"4px 10px",fontSize:10,fontFamily:"'JetBrains Mono',monospace"}}>🗑 Delete</button>
+              <button onClick={()=>{setEvents(p=>p.filter(x=>x.id!==selectedEv.id));setSelectedEv(null);}} style={{background:"none",border:`1px solid ${C.red}44`,borderRadius:6,cursor:"pointer",color:C.red,padding:"4px 10px",fontSize:10,fontFamily:"'JetBrains Mono',monospace"}}>del Delete</button>
             </div>}
           </div>
         </div>
