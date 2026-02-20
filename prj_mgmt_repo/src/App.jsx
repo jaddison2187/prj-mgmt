@@ -510,7 +510,7 @@ const WDAYS = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
 ========================================================== */
 function toICSDate(dateStr) { return dateStr.replace(/-/g,""); }
 function buildICS(events) {
-  const lines=["BEGIN:VCALENDAR","VERSION:2.0","PRODID:-//PRJ_MGMT_V6//EN","CALSCALE:GREGORIAN","METHOD:PUBLISH"];
+  const lines=["BEGIN:VCALENDAR","VERSION:2.0","PRODID:-//PRJ_MGMT_V7//EN","CALSCALE:GREGORIAN","METHOD:PUBLISH"];
   events.forEach(ev=>{
     lines.push("BEGIN:VEVENT",`UID:${ev.id}@prjmgmt`,`DTSTART;VALUE=DATE:${toICSDate(ev.date)}`,
       `DTEND;VALUE=DATE:${toICSDate(ev.date)}`,`SUMMARY:${ev.title}`,`CATEGORIES:${ev.type||""}`,`STATUS:CONFIRMED`,"END:VEVENT");
