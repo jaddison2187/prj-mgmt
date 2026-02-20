@@ -666,6 +666,8 @@ const DragCtx = React.createContext(null);
 ========================================================== */
 function SubRow({sub,taskId,portColor,onUpdSub,dragIdx,index,onReorderSubs,onDelete,onArchive,onCopySub,spaceId,projId}){
   const sh = stAssigned(sub);
+  const assignedVal = sub.assignedHrs != null ? sub.assignedHrs : sh.toFixed(1);
+  const actualVal   = sub.actualHrs   != null ? sub.actualHrs   : 0;
   const [ctxMenu,setCtxMenu]=useState(false);
   return (
     <SortableRow dragIdx={dragIdx} index={index} onReorder={onReorderSubs} style={{marginBottom:2}}>
@@ -688,12 +690,12 @@ function SubRow({sub,taskId,portColor,onUpdSub,dragIdx,index,onReorderSubs,onDel
         </select>
         {/* Assigned Hrs */}
         <input type="number" min="0" step="0.5"
-          value={sub.assignedHrs ?? sh.toFixed(1)}
+          value={assignedVal}
           onChange={e=>onUpdSub(sub.id,()=>({assignedHrs:parseFloat(e.target.value)||0}))}
           style={{...St.inp,padding:"2px 4px",fontSize:9,color:portColor}}/>
         {/* Actual Hrs */}
         <input type="number" min="0" step="0.5"
-          value={sub.actualHrs ?? 0}
+          value={actualVal}
           onChange={e=>onUpdSub(sub.id,()=>({actualHrs:parseFloat(e.target.value)||0}))}
           style={{...St.inp,padding:"2px 4px",fontSize:9,color:C.green}}/>
         <input type="range" min="0" max="100" value={sub.progress}
