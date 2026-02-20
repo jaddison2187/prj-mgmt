@@ -668,17 +668,31 @@ function SubRow({sub,taskId,portColor,onUpdSub,dragIdx,index,onReorderSubs,onDel
   const sh = stAssigned(sub);
   const assignedVal = sub.assignedHrs != null ? sub.assignedHrs : sh.toFixed(1);
   const actualVal   = sub.actualHrs   != null ? sub.actualHrs   : 0;
+  const flagIcon    = sub.flagged ? "P" : "-";
+  const flagLabel   = sub.flagged ? "Unflag" : "Flag";
+  const archIcon    = sub.archived ? "^" : "v";
+  const archLabel   = sub.archived ? "Restore" : "Archive";
+  const dotColor    = sub.flagged ? C.yellow : portColor;
+  const rowOpacity  = sub.archived ? 0.45 : 1;
+  const textColor   = sub.archived ? C.dim : C.text;
   const [ctxMenu,setCtxMenu]=useState(false);
+  const subMenuItems = [
+    {icon:"=",label:"Copy Subtask",fn:()=>onCopySub(sub)},
+    "---",
+    {icon:flagIcon,label:flagLabel,fn:()=>onUpdSub(sub.id,()=>({flagged:!sub.flagged}))},
+    {icon:archIcon,label:archLabel,fn:()=>onArchive(sub.id)},
+    {icon:"x",label:"Delete",danger:true,fn:()=>onDelete(sub.id)},
+  ];
   return (
     <SortableRow dragIdx={dragIdx} index={index} onReorder={onReorderSubs} style={{marginBottom:2}}>
       <div style={{display:"grid",gridTemplateColumns:"14px 1fr 82px 82px 72px 52px 52px 60px 94px 58px 52px 60px",
-        gap:4,padding:"4px 0",borderBottom:`1px solid ${C.border}11`,alignItems:"center",minWidth:800,
-        opacity:sub.archived?0.45:1}}>
+        gap:4,padding:"4px 0",borderBottom:"1px solid #ffffff11",alignItems:"center",minWidth:800,
+        opacity:rowOpacity}}>
         <span style={{cursor:"grab",color:C.dim,fontSize:8,textAlign:"center"}}>::</span>
         <div style={{display:"flex",alignItems:"center",gap:4}}>
-          <span style={{width:4,height:4,borderRadius:"50%",background:sub.flagged?C.yellow:portColor,display:"inline-block",flexShrink:0}}/>
+          <span style={{width:4,height:4,borderRadius:"50%",background:dotColor,display:"inline-block",flexShrink:0}}/>
           <InlineEdit value={sub.name} onChange={nm=>onUpdSub(sub.id,()=>({name:nm}))}
-            style={{fontSize:10,color:sub.archived?C.dim:C.text,fontFamily:"'JetBrains Mono',monospace"}}/>
+            style={{fontSize:10,color:textColor,fontFamily:"'JetBrains Mono',monospace"}}/>
         </div>
         <input type="date" value={sub.start} onChange={e=>onUpdSub(sub.id,()=>({start:e.target.value}))}
           style={{...St.inp,padding:"2px 4px",fontSize:9}}/>
@@ -688,12 +702,10 @@ function SubRow({sub,taskId,portColor,onUpdSub,dragIdx,index,onReorderSubs,onDel
           style={{...St.inp,padding:"2px 4px",fontSize:9,color:STATUS_C[sub.status]}}>
           {Object.keys(STATUS_C).map(s=><option key={s}>{s}</option>)}
         </select>
-        {/* Assigned Hrs */}
         <input type="number" min="0" step="0.5"
           value={assignedVal}
           onChange={e=>onUpdSub(sub.id,()=>({assignedHrs:parseFloat(e.target.value)||0}))}
           style={{...St.inp,padding:"2px 4px",fontSize:9,color:portColor}}/>
-        {/* Actual Hrs */}
         <input type="number" min="0" step="0.5"
           value={actualVal}
           onChange={e=>onUpdSub(sub.id,()=>({actualHrs:parseFloat(e.target.value)||0}))}
@@ -710,14 +722,8 @@ function SubRow({sub,taskId,portColor,onUpdSub,dragIdx,index,onReorderSubs,onDel
           {PRIORITIES.map(p=><option key={p}>{p}</option>)}
         </select>
         <div style={{display:"relative"}} onClick={e=>e.stopPropagation()}>
-          <button onClick={()=>setCtxMenu(m=>!m)} style={{background:"none",border:`1px solid ${C.border}33`,borderRadius:4,color:C.dim,cursor:"pointer",fontSize:11,padding:"0 5px",lineHeight:1.4}}>...</button>
-          {ctxMenu&&<CtxMenu onClose={()=>setCtxMenu(false)} items={[
-            {icon:"=",label:"Copy Subtask",fn:()=>onCopySub(sub)},
-            "---",
-            {icon:sub.flagged?"P":"?",label:sub.flagged?"Unflag":"Flag",fn:()=>onUpdSub(sub.id,()=>({flagged:!sub.flagged}))},
-            {icon:sub.archived?"?":"?",label:sub.archived?"Restore":"Archive",fn:()=>onArchive(sub.id)},
-            {icon:"x",label:"Delete",danger:true,fn:()=>onDelete(sub.id)},
-          ]}/>
+          <button onClick={()=>setCtxMenu(m=>!m)} style={{background:"none",border:"1px solid #ffffff22",borderRadius:4,color:C.dim,cursor:"pointer",fontSize:11,padding:"0 5px",lineHeight:1.4}}>...</button>
+          {ctxMenu && <CtxMenu onClose={()=>setCtxMenu(false)} items={subMenuItems}/>}
         </div>
         <ActionBtns archived={sub.archived} onArchive={()=>onArchive(sub.id)} onDelete={()=>onDelete(sub.id)} size={9}/>
       </div>
