@@ -351,7 +351,7 @@ function DataManager({portfolios, setPortfolios, onClose, onGistSave, gistStatus
             {/* Push / Pull */}
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
               <div style={{background:C.card2,borderRadius:10,padding:"13px 14px"}}>
-                <div style={{fontSize:9,fontWeight:700,color:C.green,letterSpacing:"0.1em",marginBottom:6,fontFamily:"'JetBrains Mono',monospace"}}>PUSH > GIST</div>
+                <div style={{fontSize:9,fontWeight:700,color:C.green,letterSpacing:"0.1em",marginBottom:6,fontFamily:"'JetBrains Mono',monospace"}}>PUSH -&gt; GIST</div>
                 <div style={{fontSize:10,color:C.muted,fontFamily:"'JetBrains Mono',monospace",marginBottom:10,lineHeight:1.5}}>Save current data to your Gist. Overwrites previous Gist content.</div>
                 <button onClick={handleGistPush} disabled={busy||!settings.gistId||!settings.token}
                   style={{...St.btn,width:"100%",padding:"8px",fontSize:10,opacity:busy||!settings.gistId||!settings.token?0.4:1}}>
@@ -359,7 +359,7 @@ function DataManager({portfolios, setPortfolios, onClose, onGistSave, gistStatus
                 </button>
               </div>
               <div style={{background:C.card2,borderRadius:10,padding:"13px 14px"}}>
-                <div style={{fontSize:9,fontWeight:700,color:C.cyan,letterSpacing:"0.1em",marginBottom:6,fontFamily:"'JetBrains Mono',monospace"}}>PULL < GIST</div>
+                <div style={{fontSize:9,fontWeight:700,color:C.cyan,letterSpacing:"0.1em",marginBottom:6,fontFamily:"'JetBrains Mono',monospace"}}>PULL &lt;- GIST</div>
                 <div style={{fontSize:10,color:C.muted,fontFamily:"'JetBrains Mono',monospace",marginBottom:10,lineHeight:1.5}}>Load data from your Gist. Auto-backs up local data first.</div>
                 <button onClick={handleGistPull} disabled={busy||!settings.gistId}
                   style={{...St.ghost,width:"100%",padding:"8px",fontSize:10,color:C.cyan,borderColor:`${C.cyan}44`,opacity:busy||!settings.gistId?0.4:1}}>
@@ -1577,7 +1577,7 @@ function GanttTab({portfolios}){
         <div style={{overflowX:"hidden"}}>
           <div style={{minWidth:LABEL+CW}}>
             <div style={{display:"flex",background:C.panel,borderBottom:`1px solid ${C.border}`}}>
-              <div style={{width:LABEL,flexShrink:0,padding:"7px 12px",fontSize:8,fontFamily:"'JetBrains Mono',monospace",color:C.dim}}>SPACE > PROJECT / TASK</div>
+              <div style={{width:LABEL,flexShrink:0,padding:"7px 12px",fontSize:8,fontFamily:"'JetBrains Mono',monospace",color:C.dim}}>SPACE / PROJECT / TASK</div>
               <div style={{width:CW,flexShrink:0,height:26,overflow:"hidden"}}>
                 <svg width={CW} height={26}>
                   {ticks.map((t,i)=>(
