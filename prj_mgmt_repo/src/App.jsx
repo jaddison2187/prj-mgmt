@@ -1,4 +1,4 @@
-// v7.3.1
+// v7.4.1
 import React, { useState, useMemo, useRef, useCallback, useEffect } from "react";
 
 /* ==========================================================
@@ -140,7 +140,48 @@ const spaceProg = sp => {
 
 /* ==========================================================
    CHANGELOG
-   v7.3.1 (2026-02-23) — Patch
+   v7.4.1 (2026-02-23) — Patch
+   FIXED:
+   - Task ASGN hours column was a read-only display div. It now renders as an
+     editable number input that writes to task.assignedHrs. When null (no
+     override set) the field defaults to the auto-computed hpd×date-range
+     value, making the pre-filled number transparent and overridable.
+   - Task ACTL hours column was also a read-only div. Now an editable number
+     input writing to task.actualHrs, consistent with how SubRow already worked.
+   - Project-level ASGN and ACTL were plain text labels with no way to adjust
+     them. The project header now shows two editable number inputs (ASGN /
+     ACTL) that store values on the project object directly (proj.assignedHrs,
+     proj.actualHrs). When null the field defaults to the bottom-up task rollup
+     sum. A small "tasks rollup: Xh / Yh" line beneath shows the computed total
+     for reference.
+   CHANGED:
+   - mkProj factory now includes assignedHrs:null and actualHrs:null fields
+     so new projects start with clean override slots.
+   - Project header progress bar moved inside the right-column so it sits flush
+     beneath the hours inputs; a second full-width bar remains below the flex row.
+
+   v7.4.1 (2026-02-23) — Minor
+   ADDED:
+   - Today Focus now shows subtasks in addition to tasks. Subtask cards display
+     a "subtask" badge and show their parent task name in the breadcrumb
+     (Space › Portfolio › Project › Parent Task).
+   - Every Focus card now has inline editing fields: START date, END date,
+     STATUS select (with Done↔100% sync), ASGN hours, ACTL hours, and a
+     progress % slider with live bar — edits write directly to the data store
+     without leaving the Focus tab.
+   - "Go to task ↗" button on every Focus card: switches to the Spaces tab,
+     selects the correct Space / Portfolio / Project, and scrolls to + briefly
+     highlights the target task row with a color flash. For subtask cards the
+     button navigates to the parent task row (since subtasks live inside it).
+   CHANGED:
+   - Cross-tab navigation state (navSpId, navPortId, navProjId, navTaskId)
+     lifted to App() so any tab can trigger deep-link navigation into SpacesTab.
+   - SpacesTab accepts nav props; useEffect consumes them once and clears them.
+   - ProjectDetail accepts scrollToTaskId + onScrollConsumed; wraps each active
+     TaskRow in a ref-capturing div; scrollIntoView + outline flash on arrival.
+   - Focus subtitle updated to reflect new capabilities.
+
+   v7.4.1 (2026-02-23) — Patch
    FIXED:
    - Progress slider no longer triggers row drag-selection highlight (blue
      dashed outline appearing on adjacent rows while sliding). Root cause:
@@ -222,7 +263,7 @@ function computeDrift(proj, bl) {
   const baseline = bl || (proj.baselines?.length ? proj.baselines[proj.baselines.length-1] : null);
   if(!baseline) return null;
 
-  // --- Project-level drift (from projectSnapshot added in v7.3.1) ---
+  // --- Project-level drift (from projectSnapshot added in v7.4.1) ---
   let projDrift = null;
   if(baseline.projectSnapshot) {
     const ps = baseline.projectSnapshot;
@@ -576,7 +617,8 @@ const mkSub  = (id,nm,s,e,hpd,prog,st,pri="Medium",tags=[]) =>
 const mkTask = (id,nm,s,e,hpd,prog,st,subs=[],pri="Medium",tags=[]) =>
   ({id,name:nm,start:s,end:e,hpd,assignedHrs:null,actualHrs:0,progress:prog,status:st,priority:pri,tags,notes:"",subtasks:subs,archived:false,flagged:false});
 const mkProj = (id,nm,s,e,st,pri,color,tasks=[],notes="",tags=[]) =>
-  ({id,name:nm,start:s,end:e,status:st,priority:pri,color,tasks,notes,tags,baselines:[],archived:false,flagged:false});
+  ({id,name:nm,start:s,end:e,status:st,priority:pri,color,tasks,notes,tags,baselines:[],
+    assignedHrs:null,actualHrs:null,archived:false,flagged:false});
 const mkPortfolio     = (id,nm,color,projects=[]) => ({id,name:nm,color,projects,archived:false});
 const mkSpace = (id,nm,color,portfolios=[]) => ({id,name:nm,color,portfolios,archived:false});
 
@@ -1245,14 +1287,18 @@ function TaskRow({task,spaceColor,onUpdTask,onUpdSub,onAddSub,taskDragIdx,taskIn
             style={{...St.inp,padding:"2px 4px",fontSize:9,color:STATUS_C[task.status]}}>
             {Object.keys(STATUS_C).map(s=><option key={s}>{s}</option>)}
           </select>
-          {/* Assigned Hrs */}
-          <div style={{fontSize:9,color:spaceColor,fontFamily:"'JetBrains Mono',monospace",textAlign:"center",fontWeight:700}}>
-            {th.toFixed(1)}h
-          </div>
-          {/* Actual Hrs */}
-          <div style={{fontSize:9,color:C.green,fontFamily:"'JetBrains Mono',monospace",textAlign:"center",fontWeight:700}}>
-            {ta.toFixed(1)}h
-          </div>
+          {/* Assigned Hrs — editable; null falls back to computed hpd×range */}
+          <input type="number" min="0" step="0.5"
+            value={task.assignedHrs ?? th}
+            onChange={e=>onUpdTask(task.id,()=>({assignedHrs:parseFloat(e.target.value)||0}))}
+            title="Assigned hours (overrides auto-calc)"
+            style={{...St.inp,padding:"2px 4px",fontSize:9,color:spaceColor,fontWeight:700}}/>
+          {/* Actual Hrs — editable */}
+          <input type="number" min="0" step="0.5"
+            value={task.actualHrs ?? 0}
+            onChange={e=>onUpdTask(task.id,()=>({actualHrs:parseFloat(e.target.value)||0}))}
+            title="Actual hours logged"
+            style={{...St.inp,padding:"2px 4px",fontSize:9,color:C.green}}/>
           <input type="range" min="0" max="100" value={tp}
             onMouseDown={e=>e.stopPropagation()}
             onTouchStart={e=>e.stopPropagation()}
@@ -1347,11 +1393,31 @@ function TaskRow({task,spaceColor,onUpdTask,onUpdSub,onAddSub,taskDragIdx,taskIn
 /* ==========================================================
    PROJECT DETAIL PANEL (side panel)
 ========================================================== */
-function ProjectDetail({proj,spaceColor,portfolioName,onUpdate,onUpdTask,onUpdSub,onAddTask,onAddSub,onBaseline,onReorderTasks,onReorderSubs,onDeleteTask,onArchiveTask,onDeleteSub,onArchiveSub,onCopyTask,onCopySub,onPasteTask,onPasteSub,clipboard}){
+function ProjectDetail({proj,spaceColor,portfolioName,onUpdate,onUpdTask,onUpdSub,onAddTask,onAddSub,onBaseline,onReorderTasks,onReorderSubs,onDeleteTask,onArchiveTask,onDeleteSub,onArchiveSub,onCopyTask,onCopySub,onPasteTask,onPasteSub,clipboard,scrollToTaskId,onScrollConsumed}){
   const [tab,setTab]          = useState("tasks");
   const [showBlId,setShowBlId]= useState(null);
   const [showArch,setShowArch]= useState(false);
   const taskDragIdx            = useRef(null);
+  const taskRowRefs            = useRef({}); // taskId → DOM node
+
+  // When navigated from Focus: switch to tasks tab, scroll to + flash target task
+  useEffect(()=>{
+    if(!scrollToTaskId) return;
+    setTab("tasks");
+    const go = () => {
+      const el = taskRowRefs.current[scrollToTaskId];
+      if(el){
+        el.scrollIntoView({behavior:"smooth",block:"center"});
+        el.style.outline = `2px solid ${spaceColor}`;
+        el.style.borderRadius = "6px";
+        setTimeout(()=>{ el.style.outline=""; el.style.borderRadius=""; },2200);
+      }
+      if(onScrollConsumed) onScrollConsumed();
+    };
+    const t = setTimeout(go, 80);
+    return ()=>clearTimeout(t);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[scrollToTaskId]);
 
   const reorderTasks = useCallback((from,to)=>{
     const n=[...proj.tasks]; const[m]=n.splice(from,1); n.splice(to,0,m); onReorderTasks(n);
@@ -1397,10 +1463,33 @@ function ProjectDetail({proj,spaceColor,portfolioName,onUpdate,onUpdTask,onUpdSu
           </div>
           <div style={{textAlign:"right",flexShrink:0}}>
             <div style={{fontSize:22,fontWeight:800,color:spaceColor,fontFamily:"'JetBrains Mono',monospace"}}>{projProg(proj)}%</div>
-            <div style={{fontSize:9,color:spaceColor,fontFamily:"'JetBrains Mono',monospace"}}>{totalAssigned.toFixed(1)}h asgn</div>
-            <div style={{fontSize:9,color:C.green,fontFamily:"'JetBrains Mono',monospace"}}>{totalActual.toFixed(1)}h actual</div>
+            {/* Project-level assigned hours — directly editable budget */}
+            <div style={{display:"flex",alignItems:"center",gap:5,justifyContent:"flex-end",marginTop:4}}>
+              <span style={{fontSize:8,color:spaceColor,fontFamily:"'JetBrains Mono',monospace"}}>ASGN</span>
+              <input type="number" min="0" step="0.5"
+                value={proj.assignedHrs ?? totalAssigned}
+                onChange={e=>onUpdate(()=>({assignedHrs:parseFloat(e.target.value)||0}))}
+                title="Project assigned hours budget"
+                style={{...St.inp,padding:"2px 5px",fontSize:10,width:64,color:spaceColor,fontWeight:700,textAlign:"right"}}/>
+              <span style={{fontSize:8,color:C.dim,fontFamily:"'JetBrains Mono',monospace"}}>h</span>
+            </div>
+            {/* Project-level actual hours */}
+            <div style={{display:"flex",alignItems:"center",gap:5,justifyContent:"flex-end",marginTop:3}}>
+              <span style={{fontSize:8,color:C.green,fontFamily:"'JetBrains Mono',monospace"}}>ACTL</span>
+              <input type="number" min="0" step="0.5"
+                value={proj.actualHrs ?? totalActual}
+                onChange={e=>onUpdate(()=>({actualHrs:parseFloat(e.target.value)||0}))}
+                title="Project actual hours logged"
+                style={{...St.inp,padding:"2px 5px",fontSize:10,width:64,color:C.green,textAlign:"right"}}/>
+              <span style={{fontSize:8,color:C.dim,fontFamily:"'JetBrains Mono',monospace"}}>h</span>
+            </div>
+            {/* Rollup totals from tasks (informational) */}
+            <div style={{fontSize:7,color:C.dim,fontFamily:"'JetBrains Mono',monospace",marginTop:4,textAlign:"right"}}>
+              tasks rollup: {totalAssigned.toFixed(1)}h / {totalActual.toFixed(1)}h
+            </div>
+            <Bar v={projProg(proj)} c={spaceColor} h={3}/>
           </div>
-        </div>
+        </div>{/* end flex row (left col + right col) */}
         <Bar v={projProg(proj)} c={spaceColor} h={5}/>
       </div>
 
@@ -1431,13 +1520,15 @@ function ProjectDetail({proj,spaceColor,portfolioName,onUpdate,onUpdTask,onUpdSu
           </div>
           <div style={{minWidth:800}}>
             {activeTasks.map((task,ti)=>(
-              <TaskRow key={task.id} task={task} spaceColor={spaceColor}
+              <div key={task.id} ref={el=>{ if(el) taskRowRefs.current[task.id]=el; }}>
+              <TaskRow task={task} spaceColor={spaceColor}
                 onUpdTask={onUpdTask} onUpdSub={onUpdSub} onAddSub={onAddSub}
                 taskDragIdx={taskDragIdx} taskIndex={ti}
                 onReorderTasks={reorderTasks} onReorderSubs={reorderSubs}
                 onDeleteTask={onDeleteTask} onArchiveTask={onArchiveTask}
                 onDeleteSub={onDeleteSub} onArchiveSub={onArchiveSub}
                 onCopyTask={onCopyTask} onCopySub={onCopySub}/>
+              </div>
             ))}
             {archTasks.length>0&&(
               <div style={{marginTop:6}}>
@@ -1608,19 +1699,31 @@ function ProjCtxMenu({pr,sp,onCopy,onFlag,onArchive,onDelete,onClose}){
   return <CtxMenu onClose={onClose} items={items}/>;
 }
 
-function SpacesTab({spaces,setSpaces,searchQ,pushUndo,sendToVoid}){
+function SpacesTab({spaces,setSpaces,searchQ,pushUndo,sendToVoid,navSpId,navPortId,navProjId,navTaskId,onNavConsumed}){
   const [activeSpId,    setActiveSpId]    = useState(spaces[0]?.id);
-  const [activePortId,   setActivePortId]   = useState(null);
-  const [activeProjId, setActiveProjId] = useState(null);
+  const [activePortId,  setActivePortId]  = useState(null);
+  const [activeProjId,  setActiveProjId]  = useState(null);
+  const [activeTaskId,  setActiveTaskId]  = useState(null); // task to scroll-to after nav
   const [confirm,      setConfirm]      = useState(null);
   const [collapsedSp,  setCollapsedSp]  = useState({});
-  const [spaceMenu,     setSpaceMenu]     = useState(null);
-  const [portMenu,       setPortMenu]       = useState(null);
+  const [spaceMenu,    setSpaceMenu]    = useState(null);
+  const [portMenu,     setPortMenu]     = useState(null);
   const [prMenu,       setPrMenu]       = useState(null);
   const [clipboard,    setClipboard]    = useState(null); // {type:"project"|"task"|"subtask", item}
   const spaceDragIdx = useRef(null);
   const projDragIdx  = useRef(null);
   const toggleSpace  = sid => setCollapsedSp(s=>({...s,[sid]:!s[sid]}));
+
+  // Consume incoming navigation from TodayFocus
+  useEffect(()=>{
+    if(!navSpId) return;
+    setActiveSpId(navSpId);
+    setActivePortId(navPortId||null);
+    setActiveProjId(navProjId||null);
+    setActiveTaskId(navTaskId||null);
+    if(onNavConsumed) onNavConsumed();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[navSpId,navPortId,navProjId,navTaskId]);
 
   const port  = spaces.find(p=>p.id===activeSpId)||spaces[0];
   const space = port?.portfolios.find(s=>s.id===activePortId);
@@ -2061,6 +2164,8 @@ function SpacesTab({spaces,setSpaces,searchQ,pushUndo,sendToVoid}){
         <ProjectDetail key={proj.id}
           proj={proj} spaceColor={port.color} portfolioName={space.name}
           clipboard={clipboard}
+          scrollToTaskId={activeTaskId}
+          onScrollConsumed={()=>setActiveTaskId(null)}
           onUpdate={fn=>updProj(space.id,proj.id,fn)}
           onUpdTask={(tid,fn)=>updTask(space.id,proj.id,tid,fn)}
           onUpdSub={(tid,stid,fn)=>updSub(space.id,proj.id,tid,stid,fn)}
@@ -2086,51 +2191,188 @@ function SpacesTab({spaces,setSpaces,searchQ,pushUndo,sendToVoid}){
 /* ==========================================================
    TODAY FOCUS TAB
 ========================================================== */
-function TodayFocus({spaces}){
+function TodayFocus({spaces, setSpaces, onNavigateTo}){
+
+  // Generic updaters used by inline fields
+  const updTaskInline = useCallback((spId,portId,projId,taskId,fn)=>{
+    setSpaces(ps=>ps.map(sp=>sp.id!==spId?sp:{...sp,
+      portfolios:sp.portfolios.map(po=>po.id!==portId?po:{...po,
+        projects:po.projects.map(pr=>pr.id!==projId?pr:{...pr,
+          tasks:(pr.tasks||[]).map(t=>t.id!==taskId?t:{...t,...fn(t)})})})}));
+  },[setSpaces]);
+
+  const updSubInline = useCallback((spId,portId,projId,taskId,subId,fn)=>{
+    setSpaces(ps=>ps.map(sp=>sp.id!==spId?sp:{...sp,
+      portfolios:sp.portfolios.map(po=>po.id!==portId?po:{...po,
+        projects:po.projects.map(pr=>pr.id!==projId?pr:{...pr,
+          tasks:(pr.tasks||[]).map(t=>t.id!==taskId?t:{...t,
+            subtasks:(t.subtasks||[]).map(s=>s.id!==subId?s:{...s,...fn(s)})})})})}));
+  },[setSpaces]);
+
   const items = useMemo(()=>{
     const arr=[];
-    spaces.forEach(po=>po.portfolios.filter(s=>!s.archived).forEach(sp=>sp.projects.filter(p=>!p.archived).forEach(pr=>{
+    spaces.forEach(sp=>sp.portfolios.filter(po=>!po.archived).forEach(po=>po.projects.filter(pr=>!pr.archived).forEach(pr=>{
+      // Tasks
       (pr.tasks||[]).filter(t=>!t.archived).forEach(t=>{
         const dL=diffD(todayS,t.end);
         const overdue=t.end<todayS&&t.status!=="Done";
-        const today=t.end===todayS;
+        const today=t.end===todayS&&t.status!=="Done";
         const soon=dL>=0&&dL<=3&&t.status!=="Done";
         if(overdue||today||soon||t.flagged){
-          arr.push({...t,spaceName:po.name,spaceColor:po.color,portfolioName:sp.name,projName:pr.name,projColor:pr.color,daysLeft:dL,overdue,today,soon,tp:taskProg(t),assigned:taskAssigned(t),actual:taskActual(t)});
+          arr.push({
+            ...t,
+            _type:"task",
+            spId:sp.id, spName:sp.name, spColor:sp.color,
+            portId:po.id, portName:po.name,
+            projId:pr.id, projName:pr.name, projColor:pr.color,
+            parentTaskName:null, parentTaskId:null,
+            daysLeft:dL, overdue, today, soon,
+            tp:taskProg(t), assigned:taskAssigned(t), actual:taskActual(t),
+          });
         }
+        // Subtasks
+        (t.subtasks||[]).filter(s=>!s.archived).forEach(s=>{
+          const sdL=diffD(todayS,s.end);
+          const sOverdue=s.end<todayS&&s.status!=="Done";
+          const sToday=s.end===todayS&&s.status!=="Done";
+          const sSoon=sdL>=0&&sdL<=3&&s.status!=="Done";
+          if(sOverdue||sToday||sSoon||s.flagged){
+            arr.push({
+              ...s,
+              _type:"subtask",
+              spId:sp.id, spName:sp.name, spColor:sp.color,
+              portId:po.id, portName:po.name,
+              projId:pr.id, projName:pr.name, projColor:pr.color,
+              parentTaskName:t.name, parentTaskId:t.id,
+              daysLeft:sdL, overdue:sOverdue, today:sToday, soon:sSoon,
+              tp:s.progress||0, assigned:stAssigned(s), actual:s.actualHrs||0,
+            });
+          }
+        });
       });
     })));
     return arr.sort((a,b)=>a.daysLeft-b.daysLeft);
   },[spaces]);
 
-  const overdue=items.filter(i=>i.overdue),todays=items.filter(i=>i.today),soon=items.filter(i=>i.soon&&!i.today&&!i.overdue),flagged=items.filter(i=>i.flagged&&!i.overdue&&!i.today&&!i.soon);
+  const overdue  = items.filter(i=>i.overdue);
+  const todays   = items.filter(i=>i.today&&!i.overdue);
+  const soon     = items.filter(i=>i.soon&&!i.today&&!i.overdue);
+  const flagged  = items.filter(i=>i.flagged&&!i.overdue&&!i.today&&!i.soon);
 
-  const renderGroup = (group,label,color) => !group.length?null:(
-    <div style={{marginBottom:18}}>
-      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
-        <span style={{background:`${color}22`,color,borderRadius:5,padding:"2px 10px",fontSize:9,fontFamily:"'JetBrains Mono',monospace",fontWeight:700}}>{label} ({group.length})</span>
-      </div>
-      {group.map(item=>(
-        <div key={item.id} style={{background:C.card,border:`1px solid ${item.overdue?C.red+"44":C.border}`,borderRadius:10,padding:"11px 14px",marginBottom:6}} className="fu">
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6}}>
-            <div>
-              <div style={{fontSize:9,color:C.dim,fontFamily:"'JetBrains Mono',monospace",marginBottom:2}}>{item.spaceName} &gt; {item.portfolioName} &gt; {item.projName}</div>
-              <div style={{fontSize:13,fontWeight:700,color:C.text,fontFamily:"'Syne',sans-serif"}}>{item.name}</div>
+  const FocusCard = ({item}) => {
+    const borderColor = item.overdue?C.red+"55":item.today?C.orange+"44":C.border;
+    const urgColor    = item.overdue?C.red:item.today?C.orange:C.yellow;
+
+    const updItem = fn => {
+      if(item._type==="task"){
+        updTaskInline(item.spId,item.portId,item.projId,item.id,fn);
+      } else {
+        updSubInline(item.spId,item.portId,item.projId,item.parentTaskId,item.id,fn);
+      }
+    };
+    const setStatus = s => {
+      const autoProgress = s==="Done"?100:item.progress;
+      updItem(()=>({status:s,progress:autoProgress}));
+    };
+    const setProgress = v => {
+      const autoStatus = v===100?"Done":(item.status==="Done"&&v<100)?"In Progress":item.status;
+      updItem(()=>({progress:v,status:autoStatus}));
+    };
+
+    return (
+      <div style={{background:C.card,border:`1px solid ${borderColor}`,borderRadius:10,padding:"12px 14px",marginBottom:7}} className="fu">
+
+        {/* ── Row 1: breadcrumb + urgency badge + nav button ── */}
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6,gap:8}}>
+          <div style={{minWidth:0}}>
+            <div style={{fontSize:8,color:C.dim,fontFamily:"'JetBrains Mono',monospace",marginBottom:3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+              {item.spName} › {item.portName} › {item.projName}
+              {item.parentTaskName&&<span style={{color:C.muted}}> › <span style={{color:C.yellow}}>{item.parentTaskName}</span></span>}
             </div>
-            <div style={{textAlign:"right",flexShrink:0}}>
-              <div style={{fontSize:9,color:item.overdue?C.red:item.today?C.orange:C.yellow,fontFamily:"'JetBrains Mono',monospace"}}>
-                {item.overdue?`${Math.abs(item.daysLeft)}d overdue`:item.today?"Today":item.soon?`${item.daysLeft}d left`:""}
-              </div>
-              <div style={{fontSize:9,color:item.projColor,fontFamily:"'JetBrains Mono',monospace"}}>{item.tp}%</div>
+            <div style={{display:"flex",alignItems:"center",gap:6}}>
+              {item._type==="subtask"&&<span style={{fontSize:8,background:`${C.purple}22`,color:C.purple,borderRadius:3,padding:"1px 5px",fontFamily:"'JetBrains Mono',monospace",flexShrink:0}}>subtask</span>}
+              {item.flagged&&<span style={{color:C.yellow,fontSize:10,flexShrink:0}}>⚑</span>}
+              <span style={{fontSize:12,fontWeight:700,color:C.text,fontFamily:"'Syne',sans-serif",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{item.name}</span>
             </div>
           </div>
-          <div style={{display:"flex",gap:12,alignItems:"center"}}>
-            <div style={{flex:1}}><Bar v={item.tp} c={item.projColor} h={4}/></div>
-            <span style={{fontSize:9,color:C.muted,fontFamily:"'JetBrains Mono',monospace",flexShrink:0}}>{item.assigned.toFixed(1)}h asgn / {item.actual.toFixed(1)}h actual</span>
-            <span style={{fontSize:8,background:`${STATUS_C[item.status]}22`,color:STATUS_C[item.status],borderRadius:3,padding:"1px 6px",fontFamily:"'JetBrains Mono',monospace",flexShrink:0}}>{item.status}</span>
+          <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4,flexShrink:0}}>
+            <span style={{fontSize:9,color:urgColor,fontFamily:"'JetBrains Mono',monospace",fontWeight:700,whiteSpace:"nowrap"}}>
+              {item.overdue?`${Math.abs(item.daysLeft)}d overdue`:item.today?"Due today":item.soon?`${item.daysLeft}d left`:"flagged"}
+            </span>
+            <button
+              onClick={()=>onNavigateTo(item.spId,item.portId,item.projId,item._type==="subtask"?item.parentTaskId:item.id)}
+              style={{background:`${item.spColor}18`,border:`1px solid ${item.spColor}55`,borderRadius:5,color:item.spColor,
+                cursor:"pointer",fontSize:9,padding:"3px 8px",fontFamily:"'JetBrains Mono',monospace",fontWeight:700,
+                whiteSpace:"nowrap",transition:"background 0.15s"}}
+              onMouseEnter={e=>e.currentTarget.style.background=`${item.spColor}33`}
+              onMouseLeave={e=>e.currentTarget.style.background=`${item.spColor}18`}>
+              Go to task ↗
+            </button>
           </div>
         </div>
-      ))}
+
+        {/* ── Row 2: inline editing fields ── */}
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr auto auto auto",gap:6,alignItems:"center",marginBottom:8}}>
+          {/* Start date */}
+          <div>
+            <div style={{fontSize:7,color:C.dim,fontFamily:"'JetBrains Mono',monospace",marginBottom:2}}>START</div>
+            <input type="date" value={item.start||""}
+              onChange={e=>updItem(()=>({start:e.target.value}))}
+              style={{...St.inp,padding:"3px 5px",fontSize:9,width:"100%"}}/>
+          </div>
+          {/* End date */}
+          <div>
+            <div style={{fontSize:7,color:urgColor,fontFamily:"'JetBrains Mono',monospace",marginBottom:2}}>END</div>
+            <input type="date" value={item.end||""}
+              onChange={e=>updItem(()=>({end:e.target.value}))}
+              style={{...St.inp,padding:"3px 5px",fontSize:9,width:"100%",borderColor:item.overdue?`${C.red}66`:undefined}}/>
+          </div>
+          {/* Status */}
+          <div>
+            <div style={{fontSize:7,color:C.dim,fontFamily:"'JetBrains Mono',monospace",marginBottom:2}}>STATUS</div>
+            <select value={item.status} onChange={e=>setStatus(e.target.value)}
+              style={{...St.inp,padding:"3px 5px",fontSize:9,color:STATUS_C[item.status]}}>
+              {Object.keys(STATUS_C).map(s=><option key={s}>{s}</option>)}
+            </select>
+          </div>
+          {/* Assigned hrs */}
+          <div>
+            <div style={{fontSize:7,color:C.dim,fontFamily:"'JetBrains Mono',monospace",marginBottom:2}}>ASGN</div>
+            <input type="number" min="0" step="0.5" value={item.assignedHrs??item.assigned.toFixed(1)}
+              onChange={e=>updItem(()=>({assignedHrs:parseFloat(e.target.value)||0}))}
+              style={{...St.inp,padding:"3px 5px",fontSize:9,width:52,color:item.spColor}}/>
+          </div>
+          {/* Actual hrs */}
+          <div>
+            <div style={{fontSize:7,color:C.dim,fontFamily:"'JetBrains Mono',monospace",marginBottom:2}}>ACTL</div>
+            <input type="number" min="0" step="0.5" value={item.actualHrs??item.actual.toFixed(1)}
+              onChange={e=>updItem(()=>({actualHrs:parseFloat(e.target.value)||0}))}
+              style={{...St.inp,padding:"3px 5px",fontSize:9,width:52,color:C.green}}/>
+          </div>
+        </div>
+
+        {/* ── Row 3: progress slider + % ── */}
+        <div style={{display:"flex",gap:8,alignItems:"center"}}>
+          <input type="range" min="0" max="100" value={item.tp}
+            onChange={e=>setProgress(+e.target.value)}
+            style={{flex:1,accentColor:item.projColor}}/>
+          <span style={{fontSize:10,fontWeight:700,color:item.projColor,fontFamily:"'JetBrains Mono',monospace",minWidth:34,textAlign:"right"}}>{item.tp}%</span>
+          <div style={{width:80}}><Bar v={item.tp} c={item.projColor} h={4}/></div>
+        </div>
+
+      </div>
+    );
+  };
+
+  const renderGroup = (group,label,color) => !group.length?null:(
+    <div style={{marginBottom:20}}>
+      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
+        <span style={{background:`${color}22`,color,borderRadius:5,padding:"3px 11px",fontSize:9,
+          fontFamily:"'JetBrains Mono',monospace",fontWeight:700,letterSpacing:"0.1em"}}>
+          {label} ({group.length})
+        </span>
+      </div>
+      {group.map(item=><FocusCard key={`${item._type}-${item.id}`} item={item}/>)}
     </div>
   );
 
@@ -2138,13 +2380,19 @@ function TodayFocus({spaces}){
     <div>
       <div style={{marginBottom:18}}>
         <div style={{fontSize:19,fontWeight:800,color:C.text,fontFamily:"'Syne',sans-serif"}}>Today Focus</div>
-        <div style={{fontSize:10,color:C.muted,fontFamily:"'JetBrains Mono',monospace",marginTop:2}}>Overdue . due today . due within 3 days . flagged</div>
+        <div style={{fontSize:10,color:C.muted,fontFamily:"'JetBrains Mono',monospace",marginTop:2}}>
+          overdue · due today · due within 3 days · flagged — tasks &amp; subtasks · inline editable · click "Go to task ↗" to jump
+        </div>
       </div>
-      {!items.length&&<div style={{padding:"40px 0",textAlign:"center",color:C.muted,fontFamily:"'JetBrains Mono',monospace"}}>All clear - nothing urgent or flagged.</div>}
-      {renderGroup(overdue,"OVERDUE",C.red)}
-      {renderGroup(todays,"DUE TODAY",C.orange)}
-      {renderGroup(soon,"COMING SOON",C.yellow)}
-      {renderGroup(flagged,"FLAGGED",C.purple)}
+      {!items.length&&(
+        <div style={{padding:"48px 0",textAlign:"center",color:C.muted,fontFamily:"'JetBrains Mono',monospace",lineHeight:2}}>
+          All clear — nothing overdue, due soon, or flagged.
+        </div>
+      )}
+      {renderGroup(overdue, "OVERDUE",     C.red)}
+      {renderGroup(todays,  "DUE TODAY",   C.orange)}
+      {renderGroup(soon,    "COMING SOON", C.yellow)}
+      {renderGroup(flagged, "FLAGGED",     C.purple)}
     </div>
   );
 }
@@ -3122,7 +3370,7 @@ function CalendarTab({spaces,filterSpaceId,setFilterSpaceId,filterPortfolioId,se
           <button onClick={()=>setMonth(new Date(TODAY.getFullYear(),TODAY.getMonth(),1))} style={{...St.ghost,padding:"5px 9px",color:C.cyan}}>Today</button>
         </div>
         <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
-          {/* Space filter — new in v7.3.1 */}
+          {/* Space filter — new in v7.4.1 */}
           <select value={filterSpaceId} onChange={e=>{setFilterSpaceId(e.target.value);setFilterPortfolioId("all");}}
             style={{...St.inp,width:"auto",padding:"4px 8px",fontSize:10}}>
             <option value="all">All Spaces</option>
@@ -3565,6 +3813,16 @@ export default function App(){
   const [undoStack,setUndoStack]     = useState([]);
   const [undoBanner,setUndoBanner]   = useState(null);
 
+  // ── CROSS-TAB NAVIGATION ── so TodayFocus "Go to Task" deep-links into SpacesTab ──
+  const [navSpId,  setNavSpId]   = useState(null);
+  const [navPortId,setNavPortId] = useState(null);
+  const [navProjId,setNavProjId] = useState(null);
+  const [navTaskId,setNavTaskId] = useState(null);
+  const navigateTo = useCallback((spId,portId,projId,taskId=null)=>{
+    setNavSpId(spId); setNavPortId(portId); setNavProjId(projId); setNavTaskId(taskId);
+    setTab("spaces");
+  },[]);
+
   // ── PERSISTENT FILTER STATE ── lifted here so switching tabs never resets them ──
 
   // Gantt
@@ -3699,7 +3957,7 @@ export default function App(){
           <div style={{width:26,height:26,borderRadius:6,background:`linear-gradient(135deg,${C.cyan},${C.blue})`,display:"flex",alignItems:"center",justifyContent:"center",boxShadow:`0 0 12px ${C.cyan}44`,fontSize:12,fontWeight:800,color:"#07090f"}}>*</div>
           <div style={{display:"flex",flexDirection:"column",gap:0}}>
             <span style={{fontSize:11,fontWeight:800,color:C.text,fontFamily:"'Syne',sans-serif",letterSpacing:"0.05em",lineHeight:1.1}}>PRJ_MGMT</span>
-            <span style={{fontSize:7,color:C.dim,fontFamily:"'JetBrains Mono',monospace",lineHeight:1.1}}>v7.3.1</span>
+            <span style={{fontSize:7,color:C.dim,fontFamily:"'JetBrains Mono',monospace",lineHeight:1.1}}>v7.4.1</span>
           </div>
         </div>
 
@@ -3769,8 +4027,10 @@ export default function App(){
 
       {/* Main content */}
       <div className="main-pad" style={{padding:20,maxWidth:1600,margin:"0 auto"}}>
-        {tab==="spaces"   &&<SpacesTab   spaces={spaces} setSpaces={setSpaces} searchQ={searchQ} pushUndo={pushUndo} sendToVoid={sendToVoid}/>}
-        {tab==="today"    &&<TodayFocus  spaces={spaces}/>}
+        {tab==="spaces"   &&<SpacesTab   spaces={spaces} setSpaces={setSpaces} searchQ={searchQ} pushUndo={pushUndo} sendToVoid={sendToVoid}
+            navSpId={navSpId} navPortId={navPortId} navProjId={navProjId} navTaskId={navTaskId}
+            onNavConsumed={()=>{setNavSpId(null);setNavPortId(null);setNavProjId(null);setNavTaskId(null);}}/>}
+        {tab==="today"    &&<TodayFocus  spaces={spaces} setSpaces={setSpaces} onNavigateTo={navigateTo}/>}
         {tab==="gantt"    &&<GanttTab    spaces={spaces}
             selSpaces={gSelSpaces}   setSelSpaces={setGSelSpaces}
             selPortfolios={gSelPorts} setSelPortfolios={setGSelPorts}
