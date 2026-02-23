@@ -1,179 +1,143 @@
-# PRJ_MGMT — Changelog
-
-All changes to this project are documented here.  
-Format: `[vX.Y.Z] — YYYY-MM-DD`  
-**MAJOR.MINOR.PATCH** — Major = breaking change, Minor = new feature, Patch = bug fix
+# PRJ_MGMT Changelog
 
 ---
 
-## [v7.2.0] — 2026-02-23
-
-### Added
-- **Saint-Gobain: CertainTeed Portfolio** — Imported from exported Google Sheets PM file
-  - New `Work` Space added at top level
-  - Portfolio: `Saint-Gobain: CertainTeed` inside Work Space
-  - 11 Projects imported as separate projects (one per sheet):
-    Manufacturing Analysis, PLM, 5S, Automation 300C, NPD Support,
-    R&D Support, Laser Torsion Grid, Additional Testing, Bradbury, Meetings, MISC
-  - All tasks imported with names, dates, and statuses (X = Done)
-  - Objective ID, Task ID, Status column, Hours per Day columns excluded per spec
-- **The Void tab** — Graveyard for permanently deleted items
-  - All deletions (Space, Portfolio, Project, Task, Subtask) send a record to The Void
-  - Shows type badge, name, breadcrumb path, deletion timestamp
-  - Search and Purge All controls
-  - Red badge on nav showing count of voided items
-  - Spaces can be fully restored from The Void
-- **Undo system (8x)** — Every delete captures a full state snapshot
-  - Banner appears at bottom of screen for 6 seconds after any deletion
-  - `↺ Undo` button restores previous state instantly
-  - Up to 8 undo steps stacked
-- **Capacity Planner view modes**
-  - `Week` mode — 1 / 2 / 4 week views with prev/next navigation (existing, enhanced)
-  - `Range` mode — custom date from/to picker, up to 90 days
-  - `Month` mode — full calendar month with prev/next/this-month navigation
-  - Summary card adapts label to active view mode
-- **Gantt touch/pinch gestures**
-  - One-finger pan — drag left/right to scroll timeline
-  - Two-finger pinch — zoom in/out on timeline
-  - `touch-action: none` CSS + `gantt-canvas` class for proper mobile handling
-- **Teams & Collaborators framework scaffold**
-  - Role hierarchy: `viewer → editor → admin → owner`
-  - Scope levels: Space / Portfolio / Project
-  - `usePermissions` hook and `checkPerm` function ready to wire to auth backend
-  - Single-user mode: always grants (no enforcement yet)
-  - Full architecture documented in code comments
-  - Ready for Supabase/Clerk integration in v2.0
-- **Responsive CSS enhancements**
-  - Tablet (≤1024px): hours columns hidden, grid simplified
-  - Mobile (≤640px): task table becomes card layout, nav labels hidden, padding tightened
-  - `overscroll-behavior: none` to prevent bounce on mobile
-  - `-webkit-text-size-adjust: 100%` to prevent iOS font scaling
+## v7.4.1 — Patch · 2026-02-23
 
 ### Fixed
-- **Space dropdown** — Now opens rightward from `...` button instead of off-screen left
-  - `CtxMenu` component refactored: defaults to `left:0` (opens right)
-  - Auto-flip: if menu would overflow right edge of window, switches to `right:0`
-  - Applies to all context menus (Space, Portfolio, Project, Task)
-- **Gantt `#` icon** — Removed `#` from Gantt nav label, replaced with `~`
-- **Gantt filter deselection** — Filters now allow full deselection (empty set = show nothing)
-  - Previously forced back to "All" when last item was deselected
-- **Garbled icons** — Fixed `?` placeholder characters appearing in:
-  - Capacity task/subtask row indent markers (now `–` and `·`)
-  - Archived portfolio restore button (now `↺ restore`)
-  - Archive tab breadcrumb separator (now `›`)
-- **Capacity grid** — Fixed `rangeW*7` hardcoded column count replaced with `displayDates.length`
-  - Works correctly for all three view modes (week/range/month)
-- **"Save Save Settings" typo** fixed in Data Manager Gist tab
-- **v7.1.0 display** — Version now shown under PRJ_MGMT logo (bumped to v7.2.0)
+- **Task ASGN column** was a read-only `<div>` showing the auto-computed `hpd × date range` value with no way to override it. Now an editable number input writing to `task.assignedHrs`. The auto-computed value pre-fills the field so it doesn't appear blank, but any typed value overrides it permanently.
+- **Task ACTL column** had the same problem — read-only div. Now an editable number input writing to `task.actualHrs`, consistent with how SubRow already worked.
+- **Project-level ASGN and ACTL** were plain text labels (`49.0h asgn`, `0.0h actual`) with no input. The project header now has two editable number inputs (ASGN / ACTL) that store values directly on the project object (`proj.assignedHrs`, `proj.actualHrs`). When null the fields default to the bottom-up task rollup sum. A small "tasks rollup: Xh / Yh" line shows the computed total for reference.
 
 ### Changed
-- **localStorage key** bumped from `prj_mgmt_0_v7` → `prj_mgmt_0_v71`
-- **Auto-migration** — On first load, old keys (`v7`, `v6`, `v5`) are silently deleted
-  - Ensures INIT data loads correctly after upgrades, no manual cache clearing needed
-- **Data Manager** — Added green AUTO-SAVE CONFIRMATION banner in Gist tab
-  - Explains that every change saves to localStorage (1s) and Gist (3s) automatically
-- **Export version** bumped from `7` → `71` in JSON and CSV export payloads
-- **Nav labels** use `nav-label` CSS class — hidden on mobile (≤640px)
+- `mkProj` factory now includes `assignedHrs: null` and `actualHrs: null` fields so new projects start with clean override slots.
+- Project header progress bar repositioned inside the right column to sit flush beneath the hours inputs; a second full-width bar remains below the flex row.
 
 ---
 
-## [v7.1.0] — 2026-02-23
+## v7.4.0 — Minor · 2026-02-23
 
 ### Added
-- **Archive tab** — Dedicated tab for finding and restoring all archived items
-  - Filter chips: All / Spaces / Portfolios / Projects / Tasks / Subtasks (with counts)
-  - Search box filters by name or breadcrumb path
-  - Item cards show type badge, name (strikethrough), full breadcrumb, `↺ restore` button
-  - Border-left colored by item's original color
-  - Empty state messages
-- **The Void tab** (initial) — `x The Void` in nav
-- **Undo banner** — Fixed-position bottom banner after deletions
-- **Responsive CSS** — Initial mobile/tablet breakpoints added
-- **Touch CSS** — `gantt-canvas` class with `touch-action: none`
+- **Today Focus — subtasks included.** The Focus feed now scans subtasks in addition to tasks. Subtask cards show a purple `subtask` badge and an extended breadcrumb: `Space › Portfolio › Project › Parent Task`. Overdue / due-today / soon / flagged detection runs independently on each subtask's own dates.
+- **Today Focus — inline editing.** Every Focus card now has live editable fields: START date, END date, STATUS select, ASGN hours, ACTL hours, and a progress % slider with bar. Edits write directly to the data store without leaving the Focus tab. Done ↔ 100% sync applies here too.
+- **Today Focus — "Go to task ↗" button.** Switches to the Spaces tab, selects the correct Space / Portfolio / Project, scrolls to the target task row, and flashes a colored outline highlight for ~2 seconds. For subtask cards the button navigates to the parent task row.
+
+### Changed
+- Cross-tab navigation state (`navSpId`, `navPortId`, `navProjId`, `navTaskId`) lifted to `App()` so any tab can trigger deep-link navigation into SpacesTab.
+- `SpacesTab` accepts nav props; a `useEffect` consumes them once and clears them to avoid re-triggering.
+- `ProjectDetail` accepts `scrollToTaskId` + `onScrollConsumed`; wraps each active TaskRow in a ref-capturing div; calls `scrollIntoView` + outline flash on arrival.
+
+---
+
+## v7.3.1 — Patch · 2026-02-23
 
 ### Fixed
-- **Archived Spaces** — Now shown as dimmed tabs in tab bar with `↺` restore button
-- **Archived Portfolios** section label fixed ("Archived Spaces" → "Archived Portfolios")
-- **Archived Portfolio restore** — Now calls correct `archivePortfolio()` toggle function
-- **ActionBtns** — Archive `▽` and delete `x` buttons now have visible borders (cyan/red)
-- **Grid column width** — Task/subtask action column widened from 60px → 72px
-- **All JSX build warnings** — 11 raw `>` characters replaced with `&gt;` HTML entity
-- **Duplicate `background` key** in nav button style removed
-- **Space tab bar** — `+ Portfolio` button label corrected to `+ Space`, pushed to far right
-- **Space context menu** — Dropdown repositioned to align with `...` button
+- **Progress slider drag-selection highlight.** While dragging the range slider, the browser's HTML5 drag also fired on the `SortableRow` wrapper, triggering the blue dashed `.drag-over` outline on adjacent rows. Fixed by adding `e.stopPropagation()` on slider `mousedown` / `touchstart`, and scoping `user-select: none` to `.sortable-row` via CSS class.
+- **Done vs 100% now bidirectionally synced** on both Task rows and Subtask rows:
+  - Slider → 100% auto-sets status to **Done**
+  - Slider pulled back below 100% on a Done task → auto-sets **In Progress**
+  - Status select → **Done** auto-sets progress to 100%
 
-### Changed
-- **Version display** — `v7` → `v7.1.0` shown under PRJ_MGMT logo as two-line stack
-- **Nav Gantt icon** — `#` present (fixed in v7.2.0)
+### Improved
+- **Gantt mobile / tablet responsiveness:**
+  - `LABEL` and chart width (`CW`) scale dynamically with `window.innerWidth`
+  - Portrait orientation shows a "rotate to landscape" hint banner (hidden in landscape via CSS media query)
+  - Chart wrapped in a horizontal scroll container on mobile so the timeline is never clipped
+  - Legend hint text changes to "pinch=zoom  drag=pan" on mobile
+  - `resize` + `orientationchange` events trigger a re-measure
 
 ---
 
-## [v7.0.0] — 2026-02-22
+## v7.3.0 — Minor · 2026-02-23
 
 ### Added
-- **GitHub Gist sync** — Auto-push to Gist 3 seconds after last change
-  - Pull from Gist (with local backup first)
-- **Data Manager modal** — Export JSON, Import JSON, Export CSV, Factory Reset, Gist config
-- **Vite + React project** — Full build system replacing HTML standalone
-- **Vercel deployment** — Live at prj-mgmt-ten.vercel.app
-- **GitHub repo** — github.com/jaddison2187/prj-mgmt
+- **Project-level baseline snapshots.** "⊙ Snap Baseline" now captures `projectSnapshot` (start, end, status, progress, assignedHrs) alongside all task snapshots.
+- **Drift tab — project drift card.** Shows schedule drift, start drift, expected % vs actual %, and a dual-layer progress bar (yellow = baseline, colored = current). Appears above the task drift table.
+- **Drift tab — baseline selector.** Dropdown to compare against any saved baseline (Latest / BL1 / BL2 …) when multiple exist.
+- **Drift tab — START DRIFT column** added to task table.
+- **Baselines tab — PROJECT SNAPSHOT block** inside each collapsible baseline card showing BL start / end / progress / hours and current-vs-baseline comparison.
+- **Baselines tab — CURR END column** added to task table so the live date is visible alongside the frozen baseline date.
+- **Persistent filter state.** Gantt, Capacity, and Calendar filter state lifted to `App()` — switching tabs never resets filters for the session.
+- **Gantt — ↺ Reset All Filters button** inside the filter panel.
+- **Capacity — ↺ Reset button** in the controls bar.
+- **Calendar — Space filter dropdown** (cascades to Portfolio filter); ↺ Reset button added.
 
 ### Changed
-- **Hierarchy renamed** — Space/Portfolio names swapped at code level
-  - Old: Portfolio (top) → Space → Project → Task → Subtask
-  - New: Space (top) → Portfolio → Project → Task → Subtask
-- **localStorage key** set to `prj_mgmt_0_v7`
+- "Snap Snapshot" button renamed to **"⊙ Snap Baseline"**.
+- `computeDrift` now accepts an explicit baseline argument (defaults to the most recent one).
+- Baseline labels now include the full date (e.g. `BL1 · Feb 23, 26`).
+
+---
+
+## v7.2.0 — Minor · 2026-02-23
+
+### Added
+- Saint-Gobain CertainTeed portfolio imported into Work Space (11 projects, 82 tasks).
+- **The Void tab** with 8-level undo stack and undo banner.
+- Capacity view modes: **Week / Range / Month**.
+- Gantt **touch / pinch-to-zoom** gestures.
+- Teams / Collaborators framework scaffold.
+- Auto-migration system for localStorage keys (`v7 → v71`, self-cleaning on load).
 
 ### Fixed
-- esbuild JSX parser errors resolved
-- Vercel build caching issues resolved
-- Double-quote artifacts from placeholder-based rename cleaned up
-
----
-
-## [v6.0.0] — 2026-02-20
-
-### Added
-- **Spaces tab redesign** — New sidebar layout with portfolio/project hierarchy
-- **Assigned vs Actual hours** tracking (separate fields)
-- **Copy/Paste/Clipboard system** — Copy Spaces, Portfolios, Projects, Tasks, Subtasks
-- **Capacity Planner enhancements** — Day-detail modal, assigned vs actual bars
-- **Calendar integration** — ICS export, shared calendar view
-- **GitHub Gist sync layer** (initial scaffold)
-- **HTML standalone version** — Single file with React 18 + Babel via CDN
-- **DataManager modal** — Export/Import JSON, CSV export, Factory Reset, auto-save
+- Space context menu dropdown opening off-screen to the left.
+- Gantt baseline bar icon rendering.
+- Filter deselection edge cases.
+- Duplicate "Save Save" label in header.
+- Capacity grid column widths.
 
 ### Changed
-- Major rebuild from v5 foundation
+- `localStorage` key bumped: `prj_mgmt_0_v7` → `prj_mgmt_0_v71`.
+- Export version field: `7` → `71`.
 
 ---
 
-## [v5.0.0] — 2026-02-15
+## v7.1.0 — Minor · 2026-02-23
 
 ### Added
-- **Full hierarchy** — Portfolio → Space → Project → Task → Subtask (5 levels)
-- **Gantt chart** — Multi-select filters, baseline snapshots, drift analysis
-- **Capacity Planner** — Weekly heat map, day-detail modal
-- **Calendar tab** — Monthly view, task markers
-- **Today Focus tab** — Overdue, due today, due within 3 days, flagged items
-- **localStorage persistence** — Auto-save on every change
-- **INITIAL DATA** — Life OS sample data (Work + Personal portfolios)
+- Archive tab.
+- The Void tab (initial scaffolding).
+- Undo banner.
+- Responsive CSS breakpoints.
+- Touch event CSS.
+
+### Fixed
+- Archived Spaces / Portfolios restore flow.
+- `ActionBtns` border styling.
+- JSX key warnings.
 
 ---
 
-## File Naming Convention
+## v7.0.0 — Major · 2026-02-22
 
-| File | Version | Notes |
-|---|---|---|
-| `App_v7.2.0.jsx` | v7.2.0 | Current |
-| `App_v7.1.0.jsx` | v7.1.0 | Previous |
-| `App.jsx` | legacy | Pre-versioning |
+### Added
+- GitHub Gist sync (load / save / auto-sync on change).
+- Data Manager modal (import / export / danger zone).
+- Vite + React build pipeline.
+- Vercel deployment (`prj-mgmt-ten.vercel.app`).
+
+### Changed
+- Full hierarchy rename: Space ↔ Portfolio swap to match mental model.
 
 ---
 
-## Roadmap (Planned)
+## v6.0.0 · 2026-02-20
 
-- `v7.3.0` — Supabase backend + real auth
-- `v7.3.0` — Teams/Collaborators UI (permissions enforcement)
-- `v7.4.0` — Mobile card view full implementation
-- `v8.0.0` — Multi-user with real-time sync (breaking data schema change)
+### Added
+- Spaces redesign with color theming per space.
+- Assigned vs Actual hours tracking introduced.
+- Copy / paste for tasks and subtasks.
+- Calendar ICS export.
+
+---
+
+## v5.0.0 — Initial public version · 2026-02-15
+
+### Added
+- 5-level hierarchy: Space → Portfolio → Project → Task → Subtask.
+- Gantt timeline with baseline bars.
+- Capacity Planner.
+- Calendar view.
+- Today Focus tab.
+- `localStorage` persistence.
+- Life OS sample data.
