@@ -1,4 +1,4 @@
-// v7.3.0
+// v7.3.1
 import React, { useState, useMemo, useRef, useCallback, useEffect } from "react";
 
 /* ==========================================================
@@ -16,11 +16,21 @@ const CSS = `
   @keyframes fu{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
   .fu{animation:fu 0.18s ease forwards}
   .drag-over{outline:2px dashed #38bdf8 !important;outline-offset:2px;border-radius:6px}
+  /* Prevent text-selection highlight while dragging rows */
+  .sortable-row{user-select:none;-webkit-user-select:none}
+  /* Re-enable pointer events on interactive controls inside no-select rows */
+  .sortable-row input,.sortable-row select,.sortable-row button,.sortable-row textarea{user-select:auto;-webkit-user-select:auto}
 
   /* Touch & pinch support */
   .gantt-canvas{touch-action:none;user-select:none;-webkit-user-select:none;cursor:grab}
   .gantt-canvas:active{cursor:grabbing}
   .scroll-x{overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:thin}
+
+  /* Gantt mobile orientation hint */
+  .gantt-landscape-hint{display:none}
+  @media(max-width:768px) and (orientation:portrait){
+    .gantt-landscape-hint{display:flex!important}
+  }
 
   /* === RESPONSIVE === */
   .task-grid{display:grid;grid-template-columns:14px 1fr 82px 82px 72px 52px 52px 60px 94px 58px 52px 72px;gap:4px;padding:5px 0;border-bottom:1px solid #1a223622;align-items:center;min-width:800px}
@@ -129,14 +139,90 @@ const spaceProg = sp => {
 };
 
 /* ==========================================================
-   DRIFT ANALYSIS
+   CHANGELOG
+   v7.3.1 (2026-02-23) — Patch
+   FIXED:
+   - Progress slider no longer triggers row drag-selection highlight (blue
+     dashed outline appearing on adjacent rows while sliding). Root cause:
+     browser HTML5 drag firing from the SortableRow wrapper while interacting
+     with the range input. Fix: stopPropagation on slider mousedown/touchstart
+     + user-select:none scoped to .sortable-row via CSS class.
+   - Done vs 100% are now bidirectionally synced:
+       • Slider → 100%   auto-sets status to "Done"
+       • Slider pulled back from 100% on a Done task → auto-sets "In Progress"
+       • Status select → "Done"  auto-sets progress to 100%
+     Applied to both Task rows and Subtask rows.
+   IMPROVED:
+   - Gantt now responsive on mobile/tablet:
+       • LABEL and CW scale dynamically based on window.innerWidth
+       • Portrait orientation shows a "rotate to landscape" hint banner
+       • Chart wrapped in horizontal scroll container on mobile so content
+         never gets clipped — user can scroll to see full timeline
+       • Hint text in legend changes to "pinch=zoom drag=pan" on mobile
+       • Resizing or rotating fires a re-measure (resize + orientationchange events)
+
+   v7.3.0 (2026-02-23) — Minor
+   ADDED:
+   - Project-level baseline/drift: "⊙ Snap Baseline" now captures project
+     start, end, status, progress, and assignedHrs alongside all task snapshots
+   - Drift tab: project-level drift card (schedule drift, start drift, expected
+     vs actual %, dual-layer progress bar) shown above task table
+   - Drift tab: baseline selector when multiple baselines exist (Latest / BL1 / BL2…)
+   - Drift tab: START DRIFT column added to task table
+   - Baselines tab: PROJECT SNAPSHOT block inside each collapsible baseline
+     showing BL start/end/progress/hours and current-vs-baseline drift
+   - Baselines tab: CURR END column added to task table so live date visible
+     alongside frozen date
+   - Persistent filter state: all Gantt, Capacity, Calendar filter state lifted
+     to App() so switching tabs never resets filters for the session
+   - Gantt: ↺ Reset All Filters button inside filter panel
+   - Capacity: ↺ Reset button in controls bar
+   - Calendar: Space filter dropdown added (filters portfolios by space);
+     ↺ Reset button added
+   CHANGED:
+   - "Snap Snapshot" button renamed "⊙ Snap Baseline"
+   - computeDrift now accepts an explicit baseline argument (defaults to latest)
+   - Baseline labels include full date (month/day/2-digit year)
+
+   v7.2.0 (2026-02-23) — Minor
+   ADDED:
+   - Saint-Gobain CertainTeed portfolio (11 projects, 82 tasks) in Work Space
+   - The Void tab with 8x undo stack and undo banner
+   - Capacity view modes: Week / Range / Month
+   - Gantt touch/pinch gestures
+   - Teams/Collaborators framework scaffold
+   - Auto-migration system for localStorage keys (v7→v71, self-cleaning)
+   FIXED:
+   - Space context menu dropdown was opening off-screen to the left
+   - Gantt baseline bar icon
+   - Filter deselection edge cases
+   - "Save Save" duplicate label
+   - Capacity grid column widths
+   CHANGED:
+   - localStorage key bumped prj_mgmt_0_v7 → prj_mgmt_0_v71
+   - Export version field 7 → 71
+
+   v7.1.0 (2026-02-23) — Minor
+   ADDED: Archive tab, The Void tab (initial), undo banner, responsive CSS, touch CSS
+   FIXED: Archived Spaces/Portfolios restore, ActionBtns borders, JSX warnings
+
+   v7.0.0 (2026-02-22) — Major
+   ADDED: GitHub Gist sync, Data Manager modal, Vite+React build, Vercel deployment
+   CHANGED: Full hierarchy renamed (Space/Portfolio swap)
+
+   v6.0.0 (2026-02-20)
+   ADDED: Spaces redesign, assigned vs actual hours, copy/paste, Calendar ICS export
+
+   v5.0.0 (2026-02-15) — Initial public version
+   ADDED: 5-level hierarchy, Gantt, Capacity Planner, Calendar, Today Focus,
+          localStorage persistence, Life OS sample data
 ========================================================== */
 function computeDrift(proj, bl) {
   // Accept a specific baseline or default to the most recent one
   const baseline = bl || (proj.baselines?.length ? proj.baselines[proj.baselines.length-1] : null);
   if(!baseline) return null;
 
-  // --- Project-level drift (from projectSnapshot added in v7.3.0) ---
+  // --- Project-level drift (from projectSnapshot added in v7.3.1) ---
   let projDrift = null;
   if(baseline.projectSnapshot) {
     const ps = baseline.projectSnapshot;
@@ -776,7 +862,7 @@ function SortableRow({dragIdx,index,onReorder,children,style={}}){
     onDragOver={e=>{e.preventDefault();setIsOver(true);}}
     onDragLeave={()=>setIsOver(false)}
     onDrop={()=>{ setIsOver(false); if(dragIdx.current!==null&&dragIdx.current!==index) onReorder(dragIdx.current,index); dragIdx.current=null; }}
-    className={isOver?"drag-over":""}
+    className={`sortable-row${isOver?" drag-over":""}`}
     style={{...style}}>{children}</div>;
 }
 function TagPicker({tags,onChange}){
@@ -997,7 +1083,11 @@ function SubRow({sub,taskId,spaceColor,onUpdSub,dragIdx,index,onReorderSubs,onDe
           style={{...St.inp,padding:"2px 4px",fontSize:9}}/>
         <input type="date" value={sub.end} onChange={e=>onUpdSub(sub.id,()=>({end:e.target.value}))}
           style={{...St.inp,padding:"2px 4px",fontSize:9}}/>
-        <select value={sub.status} onChange={e=>onUpdSub(sub.id,()=>({status:e.target.value}))}
+        <select value={sub.status} onChange={e=>{
+            const s=e.target.value;
+            const autoProgress = s==="Done" ? 100 : sub.progress;
+            onUpdSub(sub.id,()=>({status:s, progress:autoProgress}));
+          }}
           style={{...St.inp,padding:"2px 4px",fontSize:9,color:STATUS_C[sub.status]}}>
           {Object.keys(STATUS_C).map(s=><option key={s}>{s}</option>)}
         </select>
@@ -1010,7 +1100,13 @@ function SubRow({sub,taskId,spaceColor,onUpdSub,dragIdx,index,onReorderSubs,onDe
           onChange={e=>onUpdSub(sub.id,()=>({actualHrs:parseFloat(e.target.value)||0}))}
           style={{...St.inp,padding:"2px 4px",fontSize:9,color:C.green}}/>
         <input type="range" min="0" max="100" value={sub.progress}
-          onChange={e=>onUpdSub(sub.id,()=>({progress:+e.target.value}))}
+          onMouseDown={e=>e.stopPropagation()}
+          onTouchStart={e=>e.stopPropagation()}
+          onChange={e=>{
+            const v=+e.target.value;
+            const autoStatus = v===100 ? "Done" : (sub.status==="Done" && v<100) ? "In Progress" : sub.status;
+            onUpdSub(sub.id,()=>({progress:v, status:autoStatus}));
+          }}
           style={{width:"100%"}}/>
         <div style={{display:"flex",alignItems:"center",gap:3}}>
           <Bar v={sub.progress} c={spaceColor} h={4}/>
@@ -1140,7 +1236,12 @@ function TaskRow({task,spaceColor,onUpdTask,onUpdSub,onAddSub,taskDragIdx,taskIn
             style={{...St.inp,padding:"2px 4px",fontSize:9}}/>
           <input type="date" value={task.end} onChange={e=>onUpdTask(task.id,()=>({end:e.target.value}))}
             style={{...St.inp,padding:"2px 4px",fontSize:9}}/>
-          <select value={task.status} onChange={e=>onUpdTask(task.id,()=>({status:e.target.value}))}
+          <select value={task.status} onChange={e=>{
+              const s=e.target.value;
+              // Sync progress: Done → 100, setting away from Done from 100 → keep at 100 (user can adjust)
+              const autoProgress = s==="Done" ? 100 : task.progress;
+              onUpdTask(task.id,()=>({status:s, progress:autoProgress}));
+            }}
             style={{...St.inp,padding:"2px 4px",fontSize:9,color:STATUS_C[task.status]}}>
             {Object.keys(STATUS_C).map(s=><option key={s}>{s}</option>)}
           </select>
@@ -1153,7 +1254,14 @@ function TaskRow({task,spaceColor,onUpdTask,onUpdSub,onAddSub,taskDragIdx,taskIn
             {ta.toFixed(1)}h
           </div>
           <input type="range" min="0" max="100" value={tp}
-            onChange={e=>onUpdTask(task.id,()=>({progress:+e.target.value}))}
+            onMouseDown={e=>e.stopPropagation()}
+            onTouchStart={e=>e.stopPropagation()}
+            onChange={e=>{
+              const v=+e.target.value;
+              // Bidirectional sync: 100% → Done, pulling off 100 on a Done task → In Progress
+              const autoStatus = v===100 ? "Done" : (task.status==="Done" && v<100) ? "In Progress" : task.status;
+              onUpdTask(task.id,()=>({progress:v, status:autoStatus}));
+            }}
             style={{width:"100%"}}/>
           <div style={{display:"flex",alignItems:"center",gap:3}}>
             <Bar v={tp} c={spaceColor} h={4}/>
@@ -2046,7 +2154,18 @@ function TodayFocus({spaces}){
 ========================================================== */
 function GanttTab({spaces,selSpaces,setSelSpaces,selPortfolios,setSelPortfolios,selProjs,setSelProjs,
     rangeStart,setRangeStart,totalDays,setTotalDays,dateFrom,setDateFrom,dateTo,setDateTo,ganttYear,setGanttYear,onResetFilters}){
-  const LABEL=210; const CW=660;
+  // Responsive: shrink label/chart on small screens; re-check on orientation change
+  const [screenW, setScreenW] = useState(()=>window.innerWidth);
+  useEffect(()=>{
+    const upd = ()=>setScreenW(window.innerWidth);
+    window.addEventListener("resize", upd);
+    window.addEventListener("orientationchange", upd);
+    return()=>{ window.removeEventListener("resize",upd); window.removeEventListener("orientationchange",upd); };
+  },[]);
+  const isMobile   = screenW < 768;
+  const isNarrow   = screenW < 500;
+  const LABEL = isNarrow ? 120 : isMobile ? 160 : 210;
+  const CW    = isNarrow ? Math.max(200, screenW-LABEL-32) : isMobile ? Math.max(260, screenW-LABEL-32) : 660;
   const [showFilters,setShowFilters] = useState(false);
   const [expanded,setExpanded]       = useState({});
   const [blSel,setBlSel]             = useState({});
@@ -2305,10 +2424,18 @@ function GanttTab({spaces,selSpaces,setSelSpaces,selPortfolios,setSelPortfolios,
         </span>
       </div>
 
-      {/* Chart */}
+      {/* Mobile landscape nudge — only visible in portrait on small screens */}
+      <div className="gantt-landscape-hint"
+        style={{alignItems:"center",gap:10,background:`${C.cyan}15`,border:`1px solid ${C.cyan}44`,borderRadius:8,padding:"9px 14px",marginBottom:12,fontSize:11,fontFamily:"'JetBrains Mono',monospace",color:C.cyan}}>
+        <span style={{fontSize:16}}>⟳</span>
+        <span>Rotate to landscape for a wider Gantt view. You can also pinch-zoom and drag to pan.</span>
+      </div>
+
+      {/* Chart — wrapped in scroll container on mobile */}
+      <div style={{overflowX: isMobile ? "auto" : "hidden", WebkitOverflowScrolling:"touch"}}>
       <div ref={ganttRef}
         className="gantt-canvas"
-        style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,overflow:"hidden",userSelect:"none"}}
+        style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,overflow:"hidden",userSelect:"none",minWidth:LABEL+CW}}
         onMouseDown={onMouseDown} onMouseMove={onMouseMove} onMouseUp={onMouseUp} onMouseLeave={onMouseUp}
         onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
         <div style={{overflowX:"hidden"}}>
@@ -2395,15 +2522,16 @@ function GanttTab({spaces,selSpaces,setSelSpaces,selPortfolios,setSelPortfolios,
             })}
           </div>
         </div>
-        <div style={{padding:"6px 14px",borderTop:`1px solid ${C.border}`,display:"flex",gap:14,alignItems:"center"}}>
+        <div style={{padding:"6px 14px",borderTop:`1px solid ${C.border}`,display:"flex",gap:14,alignItems:"center",flexWrap:"wrap"}}>
           {[["Planned",`${C.cyan}66`],["Progress",C.cyan],["Baseline",C.yellow],["Today",C.cyan],["Overdue",C.red]].map(([l,c])=>(
             <span key={l} style={{fontSize:8,fontFamily:"'JetBrains Mono',monospace",color:c}}>{l}</span>
           ))}
           <span style={{marginLeft:"auto",fontSize:8,fontFamily:"'JetBrains Mono',monospace",color:C.dim}}>
-            scroll=zoom  drag=pan  []=jump half-range
+            {isMobile ? "pinch=zoom  drag=pan" : "scroll=zoom  drag=pan  []=jump half-range"}
           </span>
         </div>
       </div>
+      </div>{/* end scroll wrapper */}
     </div>
   );
 }
@@ -2994,7 +3122,7 @@ function CalendarTab({spaces,filterSpaceId,setFilterSpaceId,filterPortfolioId,se
           <button onClick={()=>setMonth(new Date(TODAY.getFullYear(),TODAY.getMonth(),1))} style={{...St.ghost,padding:"5px 9px",color:C.cyan}}>Today</button>
         </div>
         <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
-          {/* Space filter — new in v7.3.0 */}
+          {/* Space filter — new in v7.3.1 */}
           <select value={filterSpaceId} onChange={e=>{setFilterSpaceId(e.target.value);setFilterPortfolioId("all");}}
             style={{...St.inp,width:"auto",padding:"4px 8px",fontSize:10}}>
             <option value="all">All Spaces</option>
@@ -3571,7 +3699,7 @@ export default function App(){
           <div style={{width:26,height:26,borderRadius:6,background:`linear-gradient(135deg,${C.cyan},${C.blue})`,display:"flex",alignItems:"center",justifyContent:"center",boxShadow:`0 0 12px ${C.cyan}44`,fontSize:12,fontWeight:800,color:"#07090f"}}>*</div>
           <div style={{display:"flex",flexDirection:"column",gap:0}}>
             <span style={{fontSize:11,fontWeight:800,color:C.text,fontFamily:"'Syne',sans-serif",letterSpacing:"0.05em",lineHeight:1.1}}>PRJ_MGMT</span>
-            <span style={{fontSize:7,color:C.dim,fontFamily:"'JetBrains Mono',monospace",lineHeight:1.1}}>v7.3.0</span>
+            <span style={{fontSize:7,color:C.dim,fontFamily:"'JetBrains Mono',monospace",lineHeight:1.1}}>v7.3.1</span>
           </div>
         </div>
 
