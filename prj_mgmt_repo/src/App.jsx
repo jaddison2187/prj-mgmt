@@ -1,4 +1,4 @@
-// v8.0
+// v7.1.0
 import React, { useState, useMemo, useRef, useCallback, useEffect } from "react";
 
 /* ==========================================================
@@ -7,7 +7,7 @@ import React, { useState, useMemo, useRef, useCallback, useEffect } from "react"
 const CSS = `
   @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=JetBrains+Mono:wght@300;400;700&display=swap');
   *{box-sizing:border-box;margin:0;padding:0}
-  body{background:#07090f}
+  body{background:#07090f;-webkit-text-size-adjust:100%;overscroll-behavior:none}
   ::-webkit-scrollbar{width:4px;height:4px}
   ::-webkit-scrollbar-thumb{background:#1e2840;border-radius:2px}
   input[type=date]::-webkit-calendar-picker-indicator{filter:invert(0.35);cursor:pointer}
@@ -17,18 +17,20 @@ const CSS = `
   .fu{animation:fu 0.18s ease forwards}
   .drag-over{outline:2px dashed #38bdf8 !important;outline-offset:2px;border-radius:6px}
 
+  /* Touch & pinch support */
+  .gantt-canvas{touch-action:none;user-select:none;-webkit-user-select:none;cursor:grab}
+  .gantt-canvas:active{cursor:grabbing}
+  .scroll-x{overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:thin}
+
   /* === RESPONSIVE === */
-  /* Desktop default: full table layout */
   .task-grid{display:grid;grid-template-columns:14px 1fr 82px 82px 72px 52px 52px 60px 94px 58px 52px 72px;gap:4px;padding:5px 0;border-bottom:1px solid #1a223622;align-items:center;min-width:800px}
   .task-grid-header{display:grid;grid-template-columns:14px 1fr 82px 82px 72px 52px 52px 60px 94px 58px 52px 72px;gap:4px;padding:3px 0 6px;border-bottom:1px solid #1a2236}
 
-  /* Tablet: hide hours columns */
   @media(max-width:1024px){
     .hide-tablet{display:none!important}
     .task-grid,.task-grid-header{grid-template-columns:14px 1fr 82px 82px 72px 60px 94px 72px;min-width:600px}
   }
 
-  /* Mobile: card layout instead of table */
   @media(max-width:640px){
     .desktop-only{display:none!important}
     .mobile-only{display:flex!important}
@@ -372,7 +374,7 @@ function DataManager({spaces, setSpaces, onClose, onGistSave, gistStatus}) {
             </div>
             <button onClick={()=>saveSettingsAndClose({...settings})}
               style={{...St.btn,width:"100%",marginBottom:12,padding:"9px",fontSize:11}}>
-              Save Save Settings
+              Save Settings
             </button>
 
             {/* Push / Pull */}
@@ -395,8 +397,12 @@ function DataManager({spaces, setSpaces, onClose, onGistSave, gistStatus}) {
               </div>
             </div>
 
-            <div style={{marginTop:14,padding:"10px 13px",background:`${C.yellow}0d`,border:`1px solid ${C.yellow}22`,borderRadius:8,fontSize:9,color:C.yellow,fontFamily:"'JetBrains Mono',monospace",lineHeight:1.6}}>
-              Tip: Your token is stored only in this browser's localStorage - never sent anywhere except directly to api.github.com. Gist revision history gives you a full data changelog.
+            <div style={{marginTop:14,padding:"10px 13px",background:`${C.green}0d`,border:`1px solid ${C.green}22`,borderRadius:8,fontSize:9,color:C.green,fontFamily:"'JetBrains Mono',monospace",lineHeight:1.7}}>
+              <div style={{fontWeight:700,marginBottom:4}}>AUTO-SAVE CONFIRMATION</div>
+              Yes — every change you make (tasks, dates, notes, progress, status) is automatically saved to localStorage within 1 second, and pushed to your GitHub Gist within 3 seconds of the last change. The top-right corner shows "v SAVED" and "o gist synced HH:MM" when successful. Gist stores full revision history so you can always roll back.
+            </div>
+            <div style={{marginTop:10,padding:"10px 13px",background:`${C.yellow}0d`,border:`1px solid ${C.yellow}22`,borderRadius:8,fontSize:9,color:C.yellow,fontFamily:"'JetBrains Mono',monospace",lineHeight:1.6}}>
+              Tip: Token stored only in this browser's localStorage — never sent anywhere except api.github.com. Gist revision history = full changelog.
             </div>
           </>}
 
@@ -459,6 +465,105 @@ const mkProj = (id,nm,s,e,st,pri,color,tasks=[],notes="",tags=[]) =>
   ({id,name:nm,start:s,end:e,status:st,priority:pri,color,tasks,notes,tags,baselines:[],archived:false,flagged:false});
 const mkPortfolio     = (id,nm,color,projects=[]) => ({id,name:nm,color,projects,archived:false});
 const mkSpace = (id,nm,color,portfolios=[]) => ({id,name:nm,color,portfolios,archived:false});
+
+/* ==========================================================
+   SAINT-GOBAIN: CERTAINTEED DATA (imported from PM spreadsheet)
+========================================================== */
+/* === SAINT-GOBAIN CERTAINTEED DATA === */
+const SG_PORTFOLIO = mkPortfolio("sg_port","Saint-Gobain: CertainTeed",C.orange,[
+  mkProj("sg_6001","Manufacturing Analysis","2026-01-30","2026-02-23","In Progress","High",C.orange,[
+    mkTask("sg_6002","SAP Data Pull","2026-01-30","2026-01-30",1,100,"Done",[],"Medium",[]),
+    mkTask("sg_6003","Clean Data","2026-02-02","2026-02-05",1,100,"Done",[],"Medium",[]),
+    mkTask("sg_6004","Report","2026-02-16","2026-02-16",1,100,"Done",[],"Medium",[]),
+    mkTask("sg_6005","Growth Report","2026-02-23","2026-02-23",1,0,"In Progress",[],"Medium",[]),
+  ],"Manufacturing Analysis tasks imported from CertainTeed PM sheet.",[]),
+  mkProj("sg_6006","PLM","2026-01-21","2026-02-26","In Progress","High",C.yellow,[
+    mkTask("sg_6007","Industry 4.0 Meeting","2026-01-21","2026-01-21",1,100,"Done",[],"Medium",[]),
+    mkTask("sg_6008","Review Data","2026-01-26","2026-01-30",1,100,"Done",[],"Medium",[]),
+    mkTask("sg_6009","Research","2026-02-02","2026-02-04",1,100,"Done",[],"Medium",[]),
+    mkTask("sg_6010","Purchasing Scope Doc","2026-02-04","2026-02-04",1,100,"Done",[],"Medium",[]),
+    mkTask("sg_6011","Design Parameters","2026-02-22","2026-02-24",1,0,"In Progress",[],"Medium",[]),
+    mkTask("sg_6012","Presentation","2026-02-25","2026-02-25",1,0,"Not Started",[],"Medium",[]),
+    mkTask("sg_6013","Windchill Meeting","2026-02-26","2026-02-26",1,0,"Not Started",[],"Medium",[]),
+  ],"PLM tasks imported from CertainTeed PM sheet.",[]),
+  mkProj("sg_6014","5S","2026-01-21","2026-01-21","In Progress","High",C.green,[
+    mkTask("sg_6015","5S Task 1","2026-01-21","2026-01-21",1,100,"Done",[],"Medium",[]),
+    mkTask("sg_6016","5S Task 2","2026-01-21","2026-01-21",1,0,"In Progress",[],"Medium",[]),
+  ],"5S tasks imported from CertainTeed PM sheet.",[]),
+  mkProj("sg_6017","Automation 300C","2026-04-06","2026-05-01","Not Started","High",C.blue,[
+    mkTask("sg_6018","Rockwell Level 1","2026-04-06","2026-04-10",1,100,"Done",[],"Medium",[]),
+    mkTask("sg_6019","Rockwell Level 2","2026-04-13","2026-04-16",1,100,"Done",[],"Medium",[]),
+    mkTask("sg_6020","Rockwell Level 3","2026-04-19","2026-04-24",1,0,"Not Started",[],"Medium",[]),
+    mkTask("sg_6021","Rockwell Level Advanced Certification","2026-04-27","2026-05-01",1,0,"Not Started",[],"Medium",[]),
+  ],"Automation 300C tasks imported from CertainTeed PM sheet.",[]),
+  mkProj("sg_6022","NPD Support","2026-01-12","2026-03-30","In Progress","High",C.purple,[
+    mkTask("sg_6023","HD Visit/Training 75C/150C/225C Setup Wk1","2026-01-12","2026-01-16",1,100,"Done",[],"Medium",[]),
+    mkTask("sg_6024","HD Visit/Training 75C/150C/225C Setup Wk2","2026-01-19","2026-01-23",1,100,"Done",[],"Medium",[]),
+    mkTask("sg_6025","75C/150C/225C Report","2026-01-28","2026-01-28",1,0,"In Progress",[],"Medium",[]),
+    mkTask("sg_6026","Linear Raft Setup Instructions","2026-02-02","2026-02-05",1,0,"In Progress",[],"Medium",[]),
+    mkTask("sg_6027","Integral Reveal Raft Prep","2026-03-10","2026-03-10",1,0,"Not Started",[],"Medium",[]),
+    mkTask("sg_6028","Integral Reveal Wk1","2026-03-16","2026-03-20",1,0,"Not Started",[],"Medium",[]),
+    mkTask("sg_6029","Integral Reveal Wk2","2026-03-22","2026-03-26",1,0,"Not Started",[],"Medium",[]),
+    mkTask("sg_6030","Integral Reveal Instructions","2026-03-28","2026-03-30",1,0,"Not Started",[],"Medium",[]),
+  ],"NPD Support tasks imported from CertainTeed PM sheet.",[]),
+  mkProj("sg_6031","R&D Support","2026-01-16","2026-03-31","In Progress","High",C.pink,[
+    mkTask("sg_6032","Terminus Corners CAD Request","2026-01-16","2026-01-16",1,100,"Done",[],"Medium",[]),
+    mkTask("sg_6033","Terminus Team Meeting","2026-02-04","2026-02-04",1,100,"Done",[],"Medium",[]),
+    mkTask("sg_6034","Terminus Compound Use and Cost Doc","2026-02-04","2026-02-04",1,100,"Done",[],"Medium",[]),
+    mkTask("sg_6035","QPC Test","2026-02-11","2026-02-11",1,0,"In Progress",[],"Medium",[]),
+    mkTask("sg_6036","Test Report","2026-02-12","2026-02-12",1,0,"In Progress",[],"Medium",[]),
+    mkTask("sg_6037","Production Process Map","2026-03-09","2026-03-11",1,0,"Not Started",[],"Medium",[]),
+    mkTask("sg_6038","Terminus Support","2026-03-30","2026-03-31",1,0,"Not Started",[],"Medium",[]),
+  ],"R&D Support tasks imported from CertainTeed PM sheet.",[]),
+  mkProj("sg_6039","Laser Torsion Grid","2026-01-12","2026-02-24","In Progress","High",C.teal,[
+    mkTask("sg_6040","Revision","2026-01-12","2026-01-16",1,100,"Done",[],"Medium",[]),
+    mkTask("sg_6041","Revision, Drawing, CAD","2026-01-27","2026-01-30",1,100,"Done",[],"Medium",[]),
+    mkTask("sg_6042","Testing","2026-02-17","2026-02-17",1,0,"In Progress",[],"Medium",[]),
+    mkTask("sg_6043","Testing Report","2026-02-24","2026-02-24",1,0,"Not Started",[],"Medium",[]),
+  ],"Laser Torsion Grid tasks imported from CertainTeed PM sheet.",[]),
+  mkProj("sg_6044","Additional Testing","2026-01-14","2026-02-09","Done","High",C.red,[
+    mkTask("sg_6045","Short Cut Test","2026-01-14","2026-01-14",1,100,"Done",[],"Medium",[]),
+    mkTask("sg_6046","Column Rings","2026-02-09","2026-02-09",1,100,"Done",[],"Medium",[]),
+  ],"Additional Testing tasks imported from CertainTeed PM sheet.",[]),
+  mkProj("sg_6047","Bradbury","2026-01-05","2026-04-09","In Progress","High",C.cyan,[
+    mkTask("sg_6048","Minster Alignment Fixture Testing/Design Adjustment","2026-01-05","2026-01-05",1,100,"Done",[],"Medium",[]),
+    mkTask("sg_6049","Minster Alignment Fixture Testing Wk1","2026-01-15","2026-01-15",1,100,"Done",[],"Medium",[]),
+    mkTask("sg_6050","Measurements, Parts Ordering, Fitment Check","2026-01-27","2026-01-29",1,100,"Done",[],"Medium",[]),
+    mkTask("sg_6051","Minster Cutoff Die Alignment","2026-03-01","2026-03-02",1,100,"Done",[],"Medium",[]),
+    mkTask("sg_6052","Revisions, ECOs","2026-03-02","2026-03-02",1,100,"Done",[],"Medium",[]),
+    mkTask("sg_6053","Minster Alignment Fixture Testing Wk2","2026-03-03","2026-03-03",1,100,"Done",[],"Medium",[]),
+    mkTask("sg_6054","Bradbury Alignment Test Results","2026-04-06","2026-04-06",1,100,"Done",[],"Medium",[]),
+    mkTask("sg_6055","Bradbury Testing","2026-04-09","2026-04-09",1,0,"Not Started",[],"Medium",[]),
+  ],"Bradbury tasks imported from CertainTeed PM sheet.",[]),
+  mkProj("sg_6056","Meetings","2026-02-02","2026-03-09","In Progress","Medium",C.muted,[
+    mkTask("sg_6057","Plant Visit JP Jones","2026-02-02","2026-02-02",1,100,"Done",[],"Low",[]),
+    mkTask("sg_6058","Alignment: Teressa & Margaret","2026-02-03","2026-02-03",1,100,"Done",[],"Low",[]),
+    mkTask("sg_6059","Metal and Momentum - Ops Huddle","2026-02-04","2026-02-04",1,100,"Done",[],"Low",[]),
+    mkTask("sg_6060","MOC","2026-02-04","2026-02-04",1,100,"Done",[],"Low",[]),
+    mkTask("sg_6061","QMS Platform","2026-02-04","2026-02-04",1,100,"Done",[],"Low",[]),
+    mkTask("sg_6062","Metal and Momentum - Ops Huddle Feb 9","2026-02-09","2026-02-09",1,0,"In Progress",[],"Low",[]),
+    mkTask("sg_6063","MOC Feb 9","2026-02-09","2026-02-09",1,0,"In Progress",[],"Low",[]),
+    mkTask("sg_6064","Bill 1:1","2026-02-10","2026-02-10",1,0,"In Progress",[],"Low",[]),
+    mkTask("sg_6065","Metal and Momentum - Ops Huddle Feb 11","2026-02-11","2026-02-11",1,0,"In Progress",[],"Low",[]),
+    mkTask("sg_6066","Monthly Ops Review","2026-02-11","2026-02-11",1,0,"In Progress",[],"Low",[]),
+    mkTask("sg_6067","Weekly Review Ops Feb 16","2026-02-16","2026-02-16",1,0,"In Progress",[],"Low",[]),
+    mkTask("sg_6068","NPD Ops Feb 18","2026-02-18","2026-02-18",1,0,"In Progress",[],"Low",[]),
+    mkTask("sg_6069","SMAT Walkthrough","2026-02-18","2026-02-18",1,0,"In Progress",[],"Low",[]),
+    mkTask("sg_6070","Birkman Components","2026-02-18","2026-02-18",1,0,"In Progress",[],"Low",[]),
+    mkTask("sg_6071","Weekly Review Ops Feb 23","2026-02-23","2026-02-23",1,0,"In Progress",[],"Low",[]),
+    mkTask("sg_6072","Norcross Historian/MES Overview Feb 23","2026-02-23","2026-02-23",1,0,"In Progress",[],"Low",[]),
+    mkTask("sg_6073","NPD Ops Feb 23","2026-02-23","2026-02-23",1,0,"In Progress",[],"Low",[]),
+    mkTask("sg_6074","Terminus","2026-02-27","2026-02-27",1,0,"Not Started",[],"Low",[]),
+    mkTask("sg_6075","Norcross Historian/MES Overview Mar 2","2026-03-02","2026-03-02",1,0,"Not Started",[],"Low",[]),
+    mkTask("sg_6076","Bill 1:1 Mar 3","2026-03-03","2026-03-03",1,0,"Not Started",[],"Low",[]),
+    mkTask("sg_6077","NPD Ops Mar 4","2026-03-04","2026-03-04",1,0,"Not Started",[],"Low",[]),
+    mkTask("sg_6078","Weekly Review Ops Mar 9","2026-03-09","2026-03-09",1,0,"Not Started",[],"Low",[]),
+  ],"Meetings imported from CertainTeed PM sheet.",[]),
+  mkProj("sg_6079","MISC","2026-02-03","2026-02-05","Done","Low",C.orange,[
+    mkTask("sg_6080","Linear - Line 1 - Old Std. Box - Twist Issue","2026-02-03","2026-02-03",1,100,"Done",[],"Medium",[]),
+    mkTask("sg_6081","SAF Visit","2026-02-05","2026-02-05",1,100,"Done",[],"Medium",[]),
+  ],"MISC tasks imported from CertainTeed PM sheet.",[]),
+]);
 
 /* ==========================================================
    INITIAL DATA
@@ -526,6 +631,9 @@ const INIT = [
         mkTask("t13","Sleep Protocol","2026-01-01","2026-12-31",0,20,"In Progress",[],"Medium",["habit"]),
       ],"Maintain fitness.",["habit"]),
     ]),
+  ]),
+  mkSpace("port_work","Work",C.orange,[
+    SG_PORTFOLIO,
   ]),
 ];
 
@@ -1635,7 +1743,7 @@ function SpacesTab({spaces,setSpaces,searchQ,pushUndo,sendToVoid}){
                         <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:7,padding:"5px 10px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                           <div style={{fontSize:9,color:C.dim,fontFamily:"'JetBrains Mono',monospace"}}>? {pr.name}</div>
                           <div style={{display:"flex",gap:4}}>
-                            <button onClick={()=>updProj(sp.id,pr.id,()=>({archived:false}))} style={{...St.ghost,padding:"2px 6px",fontSize:8,color:C.cyan}}>?</button>
+                            <button onClick={()=>updProj(sp.id,pr.id,()=>({archived:false}))} style={{...St.ghost,padding:"2px 6px",fontSize:8,color:C.cyan}}>↺ restore</button>
                             <button onClick={()=>deleteProject(sp.id,pr.id)} style={{background:"none",border:"none",cursor:"pointer",color:C.red,fontSize:11}}>x</button>
                           </div>
                         </div>
@@ -1803,13 +1911,17 @@ function GanttTab({spaces}){
     activeSpaces.flatMap(p=>p.portfolios.filter(s=>!s.archived).map(s=>({...s,spaceColor:p.color,spaceName:p.name,spaceId:p.id})))
   ,[activeSpaces]);
 
-  const toggleSet = (setter,id) => setter(prev => {
+  const toggleSet = (setter, id) => setter(prev => {
+    if(id==="all") return new Set(["all"]);
     const next = new Set(prev);
-    if(id==="all"){ return new Set(["all"]); }
     next.delete("all");
-    if(next.has(id)) next.delete(id); else next.add(id);
-    if(!next.size) return new Set(["all"]);
-    return next;
+    if(next.has(id)){
+      next.delete(id);
+      // allow full deselection — show nothing
+    } else {
+      next.add(id);
+    }
+    return next.size ? next : new Set(); // allow empty = show nothing
   });
 
   const filteredPortfolios = useMemo(()=>{
@@ -1858,14 +1970,47 @@ function GanttTab({spaces}){
     return ()=>el.removeEventListener("wheel",onWheel);
   },[onWheel]);
 
-  const onMouseDown = e=>{ panRef.current={active:true,startX:e.clientX,startOff:0}; e.currentTarget.style.cursor="grabbing"; };
+  // Touch pinch-to-zoom + pan
+  const touchRef = useRef({touches:[],startDays:totalDays,startOff:0});
+  const onTouchStart = e => {
+    const ts=[...e.touches].map(t=>({x:t.clientX,y:t.clientY}));
+    touchRef.current = {touches:ts, startDays:totalDays, startOff:0, startRange:rangeStart};
+  };
+  const onTouchMove = useCallback(e=>{
+    e.preventDefault();
+    const ts=[...e.touches].map(t=>({x:t.clientX}));
+    const prev=touchRef.current;
+    if(ts.length===2&&prev.touches.length===2){
+      // Pinch: zoom
+      const currDist=Math.abs(ts[1].x-ts[0].x);
+      const prevDist=Math.abs(prev.touches[0].x-prev.touches[1].x)||1;
+      const scale=prevDist/currDist;
+      const nd=clamp(Math.round(prev.startDays*scale),5,730);
+      setTotalDays(nd);
+    } else if(ts.length===1&&prev.touches.length>=1){
+      // Pan
+      const dx=ts[0].x-prev.touches[0].x;
+      const daysDelta=Math.round(-dx/CW*totalDays);
+      if(daysDelta!==0) setRangeStart(s=>addD(s,daysDelta));
+    }
+    touchRef.current.touches=ts;
+  },[totalDays]);
+  const onTouchEnd = () => {};
+
+  useEffect(()=>{
+    const el=ganttRef.current; if(!el)return;
+    el.addEventListener("touchmove",onTouchMove,{passive:false});
+    return ()=>el.removeEventListener("touchmove",onTouchMove);
+  },[onTouchMove]);
+
+  const onMouseDown = e=>{ panRef.current={active:true,startX:e.clientX,startOff:0}; };
   const onMouseMove = useCallback(e=>{
     if(!panRef.current.active)return;
     const dm=Math.round(-(e.clientX-panRef.current.startX)/CW*totalDays);
     const diff=dm-panRef.current.startOff;
     if(diff!==0){ setRangeStart(s=>addD(s,diff)); panRef.current.startOff=dm; }
   },[totalDays]);
-  const onMouseUp = e=>{ panRef.current.active=false; if(e.currentTarget)e.currentTarget.style.cursor="grab"; };
+  const onMouseUp = e=>{ panRef.current.active=false; };
 
   const endDate = addD(rangeStart,totalDays);
   const toX     = d => clamp(diffD(fmtD(rangeStart),d)/totalDays*CW,-8,CW+8);
@@ -1996,8 +2141,10 @@ function GanttTab({spaces}){
 
       {/* Chart */}
       <div ref={ganttRef}
-        style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,overflow:"hidden",cursor:"grab",userSelect:"none"}}
-        onMouseDown={onMouseDown} onMouseMove={onMouseMove} onMouseUp={onMouseUp} onMouseLeave={onMouseUp}>
+        className="gantt-canvas"
+        style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,overflow:"hidden",userSelect:"none"}}
+        onMouseDown={onMouseDown} onMouseMove={onMouseMove} onMouseUp={onMouseUp} onMouseLeave={onMouseUp}
+        onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
         <div style={{overflowX:"hidden"}}>
           <div style={{minWidth:LABEL+CW}}>
             <div style={{display:"flex",background:C.panel,borderBottom:`1px solid ${C.border}`}}>
@@ -2099,11 +2246,15 @@ function GanttTab({spaces}){
    CAPACITY TAB
 ========================================================== */
 function CapacityTab({spaces}){
-  const [rangeW,setRangeW]   = useState(1);
-  const [weekOff,setWeekOff] = useState(0);
+  const [viewMode,setViewMode]    = useState("week"); // "week" | "range" | "month"
+  const [rangeW,setRangeW]        = useState(1);
+  const [weekOff,setWeekOff]      = useState(0);
+  const [monthOff,setMonthOff]    = useState(0);
+  const [dateFrom,setDateFrom]    = useState(fmtD(TODAY));
+  const [dateTo,setDateTo]        = useState(fmtD(addD(TODAY,13)));
   const [filterSpaceId,setFilterSpaceId] = useState("all");
   const [filterPortfolioId,setFilterPortfolioId]   = useState("all");
-  const [dayDetail,setDayDetail]     = useState(null); // date string when open
+  const [dayDetail,setDayDetail]     = useState(null);
   const CAP=8;
 
   const activeSpaces  = useMemo(()=>spaces.filter(p=>!p.archived),[spaces]);
@@ -2114,20 +2265,36 @@ function CapacityTab({spaces}){
     filterSpaceId==="all" ? allPortfolios : allPortfolios.filter(s=>s.spaceId===filterSpaceId)
   ,[filterSpaceId,allPortfolios]);
 
-  const weekDates = useMemo(()=>{
-    const arr=[]; const base=new Date(TODAY); const dow=base.getDay();
-    base.setDate(base.getDate()-(dow===0?6:dow-1));
-    for(let w=0;w<rangeW;w++) for(let d=0;d<7;d++){
-      const dt=new Date(base); dt.setDate(base.getDate()+(weekOff+w)*7+d); arr.push(dt);
+  // Compute display dates based on viewMode
+  const displayDates = useMemo(()=>{
+    const arr=[];
+    if(viewMode==="week"){
+      const base=new Date(TODAY); const dow=base.getDay();
+      base.setDate(base.getDate()-(dow===0?6:dow-1));
+      for(let w=0;w<rangeW;w++) for(let d=0;d<7;d++){
+        const dt=new Date(base); dt.setDate(base.getDate()+(weekOff+w)*7+d); arr.push(dt);
+      }
+    } else if(viewMode==="range"){
+      const s=new Date(dateFrom+"T12:00:00"), e=new Date(dateTo+"T12:00:00");
+      if(!isNaN(s)&&!isNaN(e)){
+        let cur=new Date(s);
+        while(cur<=e&&arr.length<90){arr.push(new Date(cur));cur.setDate(cur.getDate()+1);}
+      }
+    } else { // month
+      const base=new Date(TODAY.getFullYear(),TODAY.getMonth()+monthOff,1);
+      const end=new Date(base.getFullYear(),base.getMonth()+1,0);
+      let cur=new Date(base);
+      while(cur<=end){arr.push(new Date(cur));cur.setDate(cur.getDate()+1);}
     }
     return arr;
-  },[rangeW,weekOff]);
+  },[viewMode,rangeW,weekOff,monthOff,dateFrom,dateTo]);
+
+  const weekDates = displayDates; // legacy alias
 
   const capRows = useMemo(()=>{
     const rows=[];
     filteredPortfolios.forEach(sp=>{
         if(filterPortfolioId!=="all"&&sp.id!==filterPortfolioId) return;
-        const po={color:sp.spaceColor};
         sp.projects.filter(pr=>!pr.archived).forEach(pr=>{
           const activeTasks=(pr.tasks||[]).filter(t=>!t.archived);
           if(!activeTasks.length) return;
@@ -2167,7 +2334,6 @@ function CapacityTab({spaces}){
     return tot;
   };
 
-  /* Day detail modal: list all tasks/subtasks active on that day */
   const getDayItems = ds => {
     const items=[];
     capRows.forEach(pr=>pr.tasks.forEach(t=>{
@@ -2183,6 +2349,12 @@ function CapacityTab({spaces}){
     }));
     return items;
   };
+
+  // Month label for monthly view
+  const monthLabel = useMemo(()=>{
+    const d=new Date(TODAY.getFullYear(),TODAY.getMonth()+monthOff,1);
+    return d.toLocaleDateString("en-US",{month:"long",year:"numeric"});
+  },[monthOff]);
 
   const [expandedProj,setExpandedProj] = useState({});
 
@@ -2236,7 +2408,20 @@ function CapacityTab({spaces}){
         );
       })()}
 
-      <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:16,flexWrap:"wrap"}}>
+      <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:12,flexWrap:"wrap"}}>
+        {/* View mode */}
+        <div style={{display:"flex",gap:2,background:C.card2,border:`1px solid ${C.border}`,borderRadius:7,padding:3}}>
+          {[["week","Week"],["range","Range"],["month","Month"]].map(([v,l])=>(
+            <button key={v} onClick={()=>setViewMode(v)}
+              style={{...St.ghost,padding:"4px 10px",fontSize:9,border:"none",
+                background:viewMode===v?C.cyan+"22":"transparent",
+                color:viewMode===v?C.cyan:C.muted,borderRadius:5}}>
+              {l}
+            </button>
+          ))}
+        </div>
+
+        {/* Space / Portfolio filters */}
         <select value={filterSpaceId} onChange={e=>{setFilterSpaceId(e.target.value);setFilterPortfolioId("all");}}
           style={{...St.inp,width:"auto",padding:"5px 9px",fontSize:10}}>
           <option value="all">All Spaces</option>
@@ -2247,41 +2432,73 @@ function CapacityTab({spaces}){
           <option value="all">All Portfolios</option>
           {filteredPortfolios.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}
         </select>
-        <div style={{display:"flex",gap:3}}>
-          {[1,2,4].map(w=><button key={w} onClick={()=>setRangeW(w)}
-            style={{...St.btn,background:rangeW===w?C.cyan:"#1a2236",color:rangeW===w?"#07090f":C.muted,padding:"5px 10px",fontSize:10}}>{w}W</button>)}
-        </div>
-        <button onClick={()=>setWeekOff(o=>o-1)} style={{...St.ghost,padding:"5px 9px"}}>&lt;</button>
-        <button onClick={()=>setWeekOff(0)} style={{...St.ghost,padding:"5px 9px",color:C.cyan}}>This Week</button>
-        <button onClick={()=>setWeekOff(o=>o+1)} style={{...St.ghost,padding:"5px 9px"}}>&gt;</button>
-        <span style={{fontSize:9,fontFamily:"'JetBrains Mono',monospace",color:C.muted}}>
-          {weekDates[0]?.toLocaleDateString("en-US",{month:"short",day:"numeric"})} ? {weekDates[weekDates.length-1]?.toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})}
-        </span>
+
+        {/* Week mode controls */}
+        {viewMode==="week"&&<>
+          <div style={{display:"flex",gap:3}}>
+            {[1,2,4].map(w=><button key={w} onClick={()=>setRangeW(w)}
+              style={{...St.btn,background:rangeW===w?C.cyan:"#1a2236",color:rangeW===w?"#07090f":C.muted,padding:"5px 10px",fontSize:10}}>{w}W</button>)}
+          </div>
+          <button onClick={()=>setWeekOff(o=>o-1)} style={{...St.ghost,padding:"5px 9px"}}>&lt;</button>
+          <button onClick={()=>setWeekOff(0)} style={{...St.ghost,padding:"5px 9px",color:C.cyan}}>This Week</button>
+          <button onClick={()=>setWeekOff(o=>o+1)} style={{...St.ghost,padding:"5px 9px"}}>&gt;</button>
+          <span style={{fontSize:9,fontFamily:"'JetBrains Mono',monospace",color:C.muted}}>
+            {weekDates[0]?.toLocaleDateString("en-US",{month:"short",day:"numeric"})} – {weekDates[weekDates.length-1]?.toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})}
+          </span>
+        </>}
+
+        {/* Date range mode */}
+        {viewMode==="range"&&<>
+          <div style={{display:"flex",alignItems:"center",gap:5,background:C.card,border:`1px solid ${C.border}`,borderRadius:7,padding:"4px 10px"}}>
+            <span style={St.lbl}>FROM</span>
+            <input type="date" value={dateFrom} onChange={e=>setDateFrom(e.target.value)}
+              style={{...St.inp,width:"auto",padding:"2px 5px",fontSize:10,border:"none",background:"transparent"}}/>
+            <span style={{fontSize:9,color:C.dim}}>–</span>
+            <input type="date" value={dateTo} onChange={e=>setDateTo(e.target.value)}
+              style={{...St.inp,width:"auto",padding:"2px 5px",fontSize:10,border:"none",background:"transparent"}}/>
+          </div>
+          <span style={{fontSize:9,color:C.muted,fontFamily:"'JetBrains Mono',monospace"}}>{displayDates.length}d</span>
+        </>}
+
+        {/* Monthly mode */}
+        {viewMode==="month"&&<>
+          <button onClick={()=>setMonthOff(o=>o-1)} style={{...St.ghost,padding:"5px 9px"}}>&lt;</button>
+          <span style={{fontSize:11,fontWeight:700,color:C.text,fontFamily:"'JetBrains Mono',monospace",minWidth:140,textAlign:"center"}}>{monthLabel}</span>
+          <button onClick={()=>setMonthOff(0)} style={{...St.ghost,padding:"5px 9px",color:C.cyan}}>This Month</button>
+          <button onClick={()=>setMonthOff(o=>o+1)} style={{...St.ghost,padding:"5px 9px"}}>&gt;</button>
+        </>}
       </div>
 
-      {/* Weekly summary cards */}
-      <div style={{display:"grid",gridTemplateColumns:`repeat(${rangeW},1fr)`,gap:12,marginBottom:16}}>
-        {Array.from({length:rangeW},(_,wi)=>{
-          const wD=weekDates.slice(wi*7,(wi+1)*7);
-          const tot=wD.reduce((s,d)=>s+getDayTotal(d),0);
-          const pct=Math.round(tot/(CAP*7)*100);
-          return (
-            <div key={wi} style={{background:C.card,border:`1px solid ${C.cyan}33`,borderRadius:10,padding:"11px 14px"}}>
-              <div style={St.lbl}>Week {wi+1+weekOff}</div>
-              <div style={{display:"flex",justifyContent:"space-between",margin:"5px 0"}}>
-                <span style={{fontSize:20,fontWeight:800,color:C.cyan,fontFamily:"'JetBrains Mono',monospace"}}>{tot.toFixed(1)}h</span>
-                <span style={{fontSize:13,fontWeight:700,fontFamily:"'JetBrains Mono',monospace",color:pct>90?C.red:pct>70?C.orange:C.green}}>{pct}%</span>
-              </div>
-              <Bar v={pct} c={pct>90?C.red:pct>70?C.orange:C.cyan} h={4}/>
-            </div>
-          );
-        })}
-      </div>
+      {/* Period summary cards */}
+      {(()=>{
+        const numCols = viewMode==="week" ? rangeW : viewMode==="month" ? 1 : 1;
+        const chunkSize = viewMode==="week" ? 7 : displayDates.length;
+        return (
+          <div style={{display:"grid",gridTemplateColumns:`repeat(${numCols},1fr)`,gap:12,marginBottom:16}}>
+            {Array.from({length:numCols},(_,wi)=>{
+              const wD=displayDates.slice(wi*chunkSize,(wi+1)*chunkSize);
+              const tot=wD.reduce((s,d)=>s+getDayTotal(d),0);
+              const pct=Math.round(tot/(CAP*Math.max(1,wD.length))*100);
+              const label=viewMode==="week"?`Week ${wi+1+weekOff}`:viewMode==="month"?monthLabel:"Custom Range";
+              return (
+                <div key={wi} style={{background:C.card,border:`1px solid ${C.cyan}33`,borderRadius:10,padding:"11px 14px"}}>
+                  <div style={St.lbl}>{label}</div>
+                  <div style={{display:"flex",justifyContent:"space-between",margin:"5px 0"}}>
+                    <span style={{fontSize:20,fontWeight:800,color:C.cyan,fontFamily:"'JetBrains Mono',monospace"}}>{tot.toFixed(1)}h</span>
+                    <span style={{fontSize:13,fontWeight:700,fontFamily:"'JetBrains Mono',monospace",color:pct>90?C.red:pct>70?C.orange:C.green}}>{pct}%</span>
+                  </div>
+                  <Bar v={pct} c={pct>90?C.red:pct>70?C.orange:C.cyan} h={4}/>
+                </div>
+              );
+            })}
+          </div>
+        );
+      })()}
 
       {/* Main grid */}
       <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,overflow:"auto"}}>
-        <div style={{minWidth:rangeW*7*52+220}}>
-          <div style={{display:"grid",gridTemplateColumns:`220px repeat(${rangeW*7},1fr)`,background:C.panel,borderBottom:`1px solid ${C.border}`}}>
+        <div style={{minWidth:Math.max(displayDates.length*52+220,300)}}>
+          <div style={{display:"grid",gridTemplateColumns:`220px repeat(${displayDates.length},minmax(48px,1fr))`,background:C.panel,borderBottom:`1px solid ${C.border}`}}>
             <div style={{padding:"7px 12px",fontSize:8,fontFamily:"'JetBrains Mono',monospace",color:C.dim}}>PROJECT / TASK</div>
             {weekDates.map((d,i)=>{
               const isT=fmtD(d)===todayS;
@@ -2297,7 +2514,7 @@ function CapacityTab({spaces}){
 
           {capRows.map(pr=>(
             <React.Fragment key={pr.id}>
-              <div style={{display:"grid",gridTemplateColumns:`220px repeat(${rangeW*7},1fr)`,borderBottom:`1px solid ${C.border}22`,background:C.card2,cursor:"pointer"}}
+              <div style={{display:"grid",gridTemplateColumns:`220px repeat(${displayDates.length},minmax(48px,1fr))`,borderBottom:`1px solid ${C.border}22`,background:C.card2,cursor:"pointer"}}
                 onClick={()=>setExpandedProj(e=>({...e,[pr.id]:!e[pr.id]}))}>
                 <div style={{padding:"6px 10px",display:"flex",alignItems:"center",gap:5}}>
                   <span style={{color:pr.color,fontSize:10,flexShrink:0}}>{expandedProj[pr.id]?"v":">"}</span>
@@ -2326,9 +2543,9 @@ function CapacityTab({spaces}){
 
               {expandedProj[pr.id]&&pr.tasks.map(t=>(
                 <React.Fragment key={t.id}>
-                  <div style={{display:"grid",gridTemplateColumns:`220px repeat(${rangeW*7},1fr)`,borderBottom:`1px solid ${C.border}11`,background:"#090d16"}}>
+                  <div style={{display:"grid",gridTemplateColumns:`220px repeat(${displayDates.length},minmax(48px,1fr))`,borderBottom:`1px solid ${C.border}11`,background:"#090d16"}}>
                     <div style={{padding:"5px 10px 5px 24px",display:"flex",alignItems:"center",gap:4}}>
-                      <span style={{color:C.muted,fontSize:8,flexShrink:0}}>?</span>
+                      <span style={{color:C.muted,fontSize:8,flexShrink:0}}>–</span>
                       <div style={{overflow:"hidden",minWidth:0}}>
                         <div style={{fontSize:9,fontWeight:700,color:C.muted,fontFamily:"'JetBrains Mono',monospace",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.label}</div>
                         <div style={{display:"flex",gap:4,marginTop:1}}>
@@ -2347,9 +2564,9 @@ function CapacityTab({spaces}){
                     })}
                   </div>
                   {t.subtasks.map(st=>(
-                    <div key={st.id} style={{display:"grid",gridTemplateColumns:`220px repeat(${rangeW*7},1fr)`,borderBottom:`1px solid ${C.border}08`,background:"#070b13"}}>
+                    <div key={st.id} style={{display:"grid",gridTemplateColumns:`220px repeat(${displayDates.length},minmax(48px,1fr))`,borderBottom:`1px solid ${C.border}08`,background:"#070b13"}}>
                       <div style={{padding:"4px 10px 4px 38px",display:"flex",alignItems:"center",gap:4}}>
-                        <span style={{color:C.dim,fontSize:7,flexShrink:0}}>?</span>
+                        <span style={{color:C.dim,fontSize:7,flexShrink:0}}>·</span>
                         <div style={{overflow:"hidden",minWidth:0}}>
                           <div style={{fontSize:8,color:C.dim,fontFamily:"'JetBrains Mono',monospace",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{st.label}</div>
                           <div style={{display:"flex",gap:3,marginTop:1}}>
@@ -2374,7 +2591,7 @@ function CapacityTab({spaces}){
           ))}
 
           {/* Totals row */}
-          <div style={{display:"grid",gridTemplateColumns:`220px repeat(${rangeW*7},1fr)`,background:C.panel,borderTop:`1px solid ${C.border}`}}>
+          <div style={{display:"grid",gridTemplateColumns:`220px repeat(${displayDates.length},minmax(48px,1fr))`,background:C.panel,borderTop:`1px solid ${C.border}`}}>
             <div style={{padding:"7px 12px",fontSize:9,fontFamily:"'JetBrains Mono',monospace",color:C.muted,fontWeight:700}}>TOTAL / REMAINING</div>
             {weekDates.map((d,i)=>{
               const tot=getDayTotal(d); const over=tot>CAP;
@@ -2678,7 +2895,7 @@ function CalendarTab({spaces}){
                         style={{fontSize:8,fontFamily:"'JetBrains Mono',monospace",color:typeC[ev.type]||C.cyan,background:`${typeC[ev.type]||C.cyan}22`,
                           borderRadius:3,padding:"1px 4px",marginBottom:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                         <span style={{overflow:"hidden",textOverflow:"ellipsis"}}>{ev.title}</span>
-                        <span style={{opacity:0.5,flexShrink:0,marginLeft:2}}>?</span>
+                        <span style={{opacity:0.5,flexShrink:0,marginLeft:2}}>›</span>
                       </div>
                     ))}
                     {(portEvs.length+userEvs.length)>4&&<div style={{fontSize:7,color:C.dim,fontFamily:"'JetBrains Mono',monospace"}}>+{portEvs.length+userEvs.length-4} more</div>}
@@ -2957,10 +3174,77 @@ function TheVoidTab({theVoid, setTheVoid, spaces, setSpaces}){
   );
 }
 
+/* ==========================================================
+   TEAMS & COLLABORATORS FRAMEWORK (v1 scaffold)
+   
+   Architecture for future multi-user / permission system:
+   
+   ROLES (per entity level):
+     - "owner"   : full CRUD, can invite/remove members, change settings
+     - "admin"   : full CRUD on content, cannot delete space/portfolio
+     - "editor"  : can create/edit tasks, cannot delete projects/portfolios
+     - "viewer"  : read-only access
+   
+   SCOPE (permission can be applied at any level):
+     - Space-level   : applies to all portfolios/projects within
+     - Portfolio-level: applies to all projects within
+     - Project-level : only that project's tasks/subtasks
+   
+   DATA MODEL (stored alongside spaces in future Gist sync):
+   {
+     teams: [
+       { id: "team_1", name: "Manufacturing Team", members: ["user_a","user_b"] }
+     ],
+     collaborators: {
+       // key: spaceId | portfolioId | projectId
+       "port_work": [
+         { userId: "user_a", email: "alice@company.com", role: "owner", scope: "space" },
+         { userId: "user_b", email: "bob@company.com",   role: "editor", scope: "space" },
+       ],
+       "sg_port": [
+         { userId: "user_c", email: "carol@company.com", role: "viewer", scope: "portfolio" },
+       ],
+     }
+   }
+   
+   ENFORCEMENT (hook ready for wiring):
+     - checkPerm(userId, entityId, action) -> boolean
+     - Actions: "read" | "create" | "edit" | "delete" | "invite" | "settings"
+   
+   CURRENT STATE: Scaffold only — single-user mode.
+   UI placeholder in Data Manager. Gist sync stores owner userId from settings.
+   Full implementation: v2.0 when backend auth (Supabase/Clerk) is integrated.
+========================================================== */
+
+// Permission checker scaffold — always grants in single-user mode
+const ROLES_HIERARCHY = ["viewer","editor","admin","owner"];
+const PERM_MAP = {
+  viewer:  ["read"],
+  editor:  ["read","create","edit"],
+  admin:   ["read","create","edit","delete"],
+  owner:   ["read","create","edit","delete","invite","settings"],
+};
+function checkPerm(collaborators, entityId, userId, action){
+  // Single-user mode: always grant
+  if(!collaborators || !userId) return true;
+  const perms = collaborators[entityId] || [];
+  const entry = perms.find(p=>p.userId===userId);
+  if(!entry) return false;
+  return (PERM_MAP[entry.role]||[]).includes(action);
+}
+
+// Hook for permission-aware operations (scaffold)
+function usePermissions(userId){
+  return {
+    can: (collaborators, entityId, action) => checkPerm(collaborators, entityId, userId, action),
+    // Future: fetch from backend, subscribe to changes
+  };
+}
+
 const NAV = [
   {id:"spaces",  icon:"*", label:"Spaces"},
   {id:"today",   icon:"o", label:"Focus"},
-  {id:"gantt",   icon:"#", label:"Gantt"},
+  {id:"gantt",   icon:"~", label:"Gantt"},
   {id:"capacity",icon:"+", label:"Capacity"},
   {id:"calendar",icon:"@", label:"Calendar"},
   {id:"archive", icon:"v", label:"Archive"},
