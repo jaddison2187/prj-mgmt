@@ -1,4 +1,4 @@
-// v7.2.0
+// v7.3.0
 import React, { useState, useMemo, useRef, useCallback, useEffect } from "react";
 
 /* ==========================================================
@@ -131,13 +131,34 @@ const spaceProg = sp => {
 /* ==========================================================
    DRIFT ANALYSIS
 ========================================================== */
-function computeDrift(proj) {
-  const bl = proj.baselines?.[0];
-  if(!bl) return null;
-  return (proj.tasks||[]).filter(t=>!t.archived).map(t=>{
-    const snap = bl.snapshot.find(s=>s.id===t.id);
+function computeDrift(proj, bl) {
+  // Accept a specific baseline or default to the most recent one
+  const baseline = bl || (proj.baselines?.length ? proj.baselines[proj.baselines.length-1] : null);
+  if(!baseline) return null;
+
+  // --- Project-level drift (from projectSnapshot added in v7.3.0) ---
+  let projDrift = null;
+  if(baseline.projectSnapshot) {
+    const ps = baseline.projectSnapshot;
+    const startDrift = diffD(ps.start, proj.start);
+    const endDrift   = diffD(ps.end,   proj.end);
+    const daysLeft   = diffD(todayS,   proj.end);
+    const totalSpan  = Math.max(1, diffD(ps.start, ps.end));
+    const elapsed    = diffD(ps.start, todayS);
+    const currentProg = projProg(proj);
+    const expectedProg = Math.round(clamp(elapsed/totalSpan*100, 0, 100));
+    const progGap = currentProg - expectedProg;
+    const color = endDrift>7||progGap<-25?C.red:endDrift>3||progGap<-12?C.orange:daysLeft>=0&&daysLeft<14&&currentProg<80?C.yellow:C.green;
+    projDrift = {startDrift,endDrift,daysLeft,currentProg,expectedProg,progGap,color,
+      blStart:ps.start,blEnd:ps.end,blProgress:ps.progress,blStatus:ps.status};
+  }
+
+  // --- Task-level drift ---
+  const taskDrifts = (proj.tasks||[]).filter(t=>!t.archived).map(t=>{
+    const snap = baseline.snapshot.find(s=>s.id===t.id);
     if(!snap) return null;
-    const endDrift   = diffD(snap.end, t.end);
+    const startDrift = diffD(snap.start, t.start);
+    const endDrift   = diffD(snap.end,   t.end);
     const daysLeft   = diffD(todayS, t.end);
     const totalSpan  = Math.max(1, diffD(snap.start, snap.end));
     const elapsed    = diffD(snap.start, todayS);
@@ -145,8 +166,11 @@ function computeDrift(proj) {
     const currentProg  = taskProg(t);
     const progGap      = currentProg - expectedProg;
     const color = endDrift>5||progGap<-20?C.red:endDrift>2||progGap<-10?C.orange:daysLeft>=0&&daysLeft<14&&currentProg<80?C.yellow:C.green;
-    return {id:t.id,name:t.name,endDrift,daysLeft,expectedProg,currentProg,progGap,color};
+    return {id:t.id,name:t.name,startDrift,endDrift,daysLeft,expectedProg,currentProg,progGap,color,
+      blStart:snap.start,blEnd:snap.end};
   }).filter(Boolean);
+
+  return {projDrift, taskDrifts};
 }
 
 /* ==========================================================
@@ -770,36 +794,123 @@ function TagPicker({tags,onChange}){
   </div>;
 }
 function DriftPanel({proj}){
-  const drift = useMemo(()=>computeDrift(proj),[proj]);
-  if(!drift) return <div style={{padding:"24px",textAlign:"center",color:C.muted,fontFamily:"'JetBrains Mono',monospace",fontSize:11}}>No baseline snapshot yet. Take a Snap Snapshot first.</div>;
-  if(!drift.length) return <div style={{padding:"24px",textAlign:"center",color:C.muted,fontSize:11}}>No active tasks to compare.</div>;
-  const slipped=drift.filter(d=>d.endDrift>2),behind=drift.filter(d=>d.progGap<-10),atRisk=drift.filter(d=>d.daysLeft>=0&&d.daysLeft<14&&d.currentProg<90),onTrack=drift.filter(d=>d.endDrift<=2&&d.progGap>=-10);
-  return <div style={{padding:"14px 16px"}}>
-    <div style={{display:"flex",gap:8,marginBottom:14,flexWrap:"wrap"}}>
-      {[[slipped.length,"Slipped",C.red],[behind.length,"Behind",C.orange],[atRisk.length,"At Risk",C.yellow],[onTrack.length,"On Track",C.green]].map(([n,l,c])=>(
-        <div key={l} style={{background:`${c}15`,border:`1px solid ${c}44`,borderRadius:8,padding:"7px 13px",flex:1,minWidth:70}}>
-          <div style={{fontSize:18,fontWeight:800,color:c,fontFamily:"'JetBrains Mono',monospace"}}>{n}</div>
-          <div style={{fontSize:8,color:c,letterSpacing:"0.1em"}}>{l.toUpperCase()}</div>
-        </div>
-      ))}
+  const baselines = proj.baselines||[];
+  const [selBlId, setSelBlId] = useState(null); // null = most recent
+
+  const activeBl = selBlId ? baselines.find(b=>b.id===selBlId) : null;
+  const result   = useMemo(()=>computeDrift(proj, activeBl),[proj, activeBl]);
+  const displayBl = activeBl || (baselines.length ? baselines[baselines.length-1] : null);
+
+  if(!baselines.length) return (
+    <div style={{padding:"32px 24px",textAlign:"center",color:C.muted,fontFamily:"'JetBrains Mono',monospace",lineHeight:2}}>
+      No baseline yet. Click <span style={{color:C.yellow,fontWeight:700}}>"⊙ Snap Baseline"</span> above to save the current schedule.<br/>
+      <span style={{fontSize:9,color:C.dim}}>Captures project dates, all task dates, progress, and hours — so drift is measured against that frozen point.</span>
     </div>
-    <div style={{display:"grid",gridTemplateColumns:"1fr 60px 80px 70px 80px",gap:6,padding:"3px 0 6px",borderBottom:`1px solid ${C.border}`,marginBottom:4}}>
-      {["TASK","DAYS LEFT","END DRIFT","EXPECTED","CURRENT"].map(h=><div key={h} style={St.lbl}>{h}</div>)}
-    </div>
-    {drift.map(d=>{
-      const driftLabel=d.endDrift===0?"on time":d.endDrift>0?`+${d.endDrift}d late`:`${Math.abs(d.endDrift)}d early`;
-      return <div key={d.id} style={{display:"grid",gridTemplateColumns:"1fr 60px 80px 70px 80px",gap:6,padding:"6px 0",borderBottom:`1px solid ${C.border}11`,alignItems:"center"}}>
-        <span style={{fontSize:10,color:C.text,fontFamily:"'JetBrains Mono',monospace",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{d.name}</span>
-        <span style={{fontSize:9,color:d.daysLeft<0?C.red:d.daysLeft<7?C.orange:C.muted,fontFamily:"'JetBrains Mono',monospace"}}>{d.daysLeft<0?`${Math.abs(d.daysLeft)}d over`:`${d.daysLeft}d`}</span>
-        <span style={{fontSize:9,color:d.color,fontWeight:700,fontFamily:"'JetBrains Mono',monospace"}}>{driftLabel}</span>
-        <span style={{fontSize:9,color:C.muted,fontFamily:"'JetBrains Mono',monospace"}}>{d.expectedProg}%</span>
-        <div style={{display:"flex",gap:4,alignItems:"center"}}>
-          <span style={{fontSize:9,color:d.color,fontWeight:700,fontFamily:"'JetBrains Mono',monospace"}}>{d.currentProg}%</span>
-          <Bar v={d.currentProg} c={d.color} h={3}/>
+  );
+
+  const {projDrift, taskDrifts} = result;
+  const driftLabel = d => d.endDrift===0?"on time":d.endDrift>0?`+${d.endDrift}d late`:`${Math.abs(d.endDrift)}d early`;
+  const startLabel = d => d.startDrift===0?"none":d.startDrift>0?`+${d.startDrift}d`:String(d.startDrift)+"d";
+  const slipped=taskDrifts.filter(d=>d.endDrift>2);
+  const behind =taskDrifts.filter(d=>d.progGap<-10);
+  const atRisk =taskDrifts.filter(d=>d.daysLeft>=0&&d.daysLeft<14&&d.currentProg<90);
+  const onTrack=taskDrifts.filter(d=>d.endDrift<=2&&d.progGap>=-10);
+
+  return (
+    <div style={{padding:"14px 16px"}}>
+
+      {/* Baseline selector (only if multiple baselines) */}
+      {baselines.length>1&&(
+        <div style={{display:"flex",gap:6,alignItems:"center",marginBottom:14,flexWrap:"wrap"}}>
+          <span style={{fontSize:8,color:C.dim,fontFamily:"'JetBrains Mono',monospace",letterSpacing:"0.1em"}}>COMPARING VS:</span>
+          <button onClick={()=>setSelBlId(null)}
+            style={{...St.ghost,padding:"2px 8px",fontSize:9,
+              color:!selBlId?C.yellow:C.muted,borderColor:!selBlId?`${C.yellow}55`:C.border}}>
+            Latest
+          </button>
+          {baselines.map(bl=>(
+            <button key={bl.id} onClick={()=>setSelBlId(selBlId===bl.id?null:bl.id)}
+              style={{...St.ghost,padding:"2px 8px",fontSize:9,
+                color:selBlId===bl.id?C.yellow:C.muted,borderColor:selBlId===bl.id?`${C.yellow}55`:C.border}}>
+              {bl.label}
+            </button>
+          ))}
         </div>
-      </div>;
-    })}
-  </div>;
+      )}
+
+      {/* Project-level drift card */}
+      {projDrift&&(
+        <div style={{background:`${projDrift.color}0d`,border:`1px solid ${projDrift.color}44`,borderRadius:10,padding:"12px 14px",marginBottom:14}}>
+          <div style={{fontSize:8,color:projDrift.color,fontFamily:"'JetBrains Mono',monospace",fontWeight:700,letterSpacing:"0.13em",marginBottom:10}}>
+            PROJECT DRIFT — vs {displayBl?.label}
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8,marginBottom:10}}>
+            {[
+              ["Schedule", driftLabel(projDrift), projDrift.endDrift===0?C.green:projDrift.endDrift>0?C.red:C.green],
+              ["Start drift", startLabel(projDrift), projDrift.startDrift===0?C.green:C.orange],
+              ["Expected %", `${projDrift.expectedProg}%`, C.muted],
+              ["Actual %",   `${projDrift.currentProg}%`, projDrift.color],
+            ].map(([l,v,c])=>(
+              <div key={l} style={{background:C.card,borderRadius:6,padding:"7px 9px"}}>
+                <div style={{fontSize:7,color:C.dim,fontFamily:"'JetBrains Mono',monospace",marginBottom:3,letterSpacing:"0.08em"}}>{l}</div>
+                <div style={{fontSize:14,fontWeight:800,color:c,fontFamily:"'JetBrains Mono',monospace"}}>{v}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{display:"flex",gap:16,fontSize:9,fontFamily:"'JetBrains Mono',monospace",color:C.muted,marginBottom:6,flexWrap:"wrap"}}>
+            <span>Baseline: {projDrift.blStart} → {projDrift.blEnd}</span>
+            <span>Current: {proj.start} → {proj.end}</span>
+            {projDrift.blProgress!=null&&<span>BL Progress: {projDrift.blProgress}%</span>}
+          </div>
+          <div style={{position:"relative",height:6,background:C.card2,borderRadius:3,overflow:"hidden"}}>
+            <div style={{position:"absolute",left:0,top:0,height:"100%",width:`${projDrift.blProgress||0}%`,background:`${C.yellow}55`,borderRadius:3}}/>
+            <div style={{position:"absolute",left:0,top:0,height:"100%",width:`${projDrift.currentProg}%`,background:projDrift.color,borderRadius:3,opacity:0.85}}/>
+          </div>
+          <div style={{display:"flex",justifyContent:"space-between",marginTop:3,fontSize:8,fontFamily:"'JetBrains Mono',monospace"}}>
+            <span style={{color:`${C.yellow}aa`}}>BL {projDrift.blProgress||0}%</span>
+            <span style={{color:projDrift.progGap>=0?C.green:C.red,fontWeight:700}}>
+              {projDrift.progGap>=0?"+":""}{projDrift.progGap}% vs expected
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* Task-level summary chips */}
+      <div style={{display:"flex",gap:8,marginBottom:14,flexWrap:"wrap"}}>
+        {[[slipped.length,"Slipped",C.red],[behind.length,"Behind",C.orange],[atRisk.length,"At Risk",C.yellow],[onTrack.length,"On Track",C.green]].map(([n,l,c])=>(
+          <div key={l} style={{background:`${c}15`,border:`1px solid ${c}44`,borderRadius:8,padding:"7px 13px",flex:1,minWidth:70}}>
+            <div style={{fontSize:18,fontWeight:800,color:c,fontFamily:"'JetBrains Mono',monospace"}}>{n}</div>
+            <div style={{fontSize:8,color:c,letterSpacing:"0.1em"}}>{l.toUpperCase()}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Task drift table */}
+      {!taskDrifts.length
+        ? <div style={{textAlign:"center",color:C.muted,fontSize:10,fontFamily:"'JetBrains Mono',monospace",padding:"12px 0"}}>No tasks in baseline to compare.</div>
+        : <>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 68px 90px 80px 70px 80px",gap:6,padding:"3px 0 6px",borderBottom:`1px solid ${C.border}`,marginBottom:4}}>
+            {["TASK","DAYS LEFT","END DRIFT","START DRIFT","EXPECTED","ACTUAL"].map(h=><div key={h} style={St.lbl}>{h}</div>)}
+          </div>
+          {taskDrifts.map(d=>(
+            <div key={d.id} style={{display:"grid",gridTemplateColumns:"1fr 68px 90px 80px 70px 80px",gap:6,padding:"6px 0",borderBottom:`1px solid ${C.border}11`,alignItems:"center"}}>
+              <span style={{fontSize:10,color:C.text,fontFamily:"'JetBrains Mono',monospace",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{d.name}</span>
+              <span style={{fontSize:9,fontFamily:"'JetBrains Mono',monospace",color:d.daysLeft<0?C.red:d.daysLeft<7?C.orange:C.muted}}>
+                {d.daysLeft<0?`${Math.abs(d.daysLeft)}d over`:`${d.daysLeft}d`}
+              </span>
+              <span style={{fontSize:9,fontWeight:700,fontFamily:"'JetBrains Mono',monospace",color:d.endDrift===0?C.green:d.endDrift>0?C.red:C.green}}>{driftLabel(d)}</span>
+              <span style={{fontSize:9,fontFamily:"'JetBrains Mono',monospace",color:d.startDrift===0?C.green:C.orange}}>{startLabel(d)}</span>
+              <span style={{fontSize:9,color:C.muted,fontFamily:"'JetBrains Mono',monospace"}}>{d.expectedProg}%</span>
+              <div style={{display:"flex",gap:4,alignItems:"center"}}>
+                <span style={{fontSize:9,color:d.color,fontWeight:700,fontFamily:"'JetBrains Mono',monospace"}}>{d.currentProg}%</span>
+                <Bar v={d.currentProg} c={d.color} h={3}/>
+              </div>
+            </div>
+          ))}
+        </>
+      }
+    </div>
+  );
 }
 function ActionBtns({archived,onArchive,onDelete,size=10}){
   return <div style={{display:"flex",gap:2,alignItems:"center"}}>
@@ -1198,7 +1309,7 @@ function ProjectDetail({proj,spaceColor,portfolioName,onUpdate,onUpdTask,onUpdSu
         <div style={{flex:1}}/>
         <button onClick={onBaseline}
           style={{...St.ghost,margin:"4px 12px 4px 0",padding:"3px 10px",fontSize:9,
-            color:C.yellow,borderColor:`${C.yellow}44`,whiteSpace:"nowrap"}}>Snap Snapshot</button>
+            color:C.yellow,borderColor:`${C.yellow}44`,whiteSpace:"nowrap"}}>⊙ Snap Baseline</button>
       </div>
 
       {/* TASKS */}
@@ -1254,33 +1365,66 @@ function ProjectDetail({proj,spaceColor,portfolioName,onUpdate,onUpdTask,onUpdSu
       {tab==="baselines"&&(
         <div style={{padding:"12px 16px"}}>
           {!proj.baselines?.length&&(
-            <div style={{color:C.muted,fontSize:11,fontFamily:"'JetBrains Mono',monospace",padding:"22px 0",textAlign:"center"}}>
-              No snapshots yet - click Snap Snapshot to save the current schedule.
+            <div style={{color:C.muted,fontSize:11,fontFamily:"'JetBrains Mono',monospace",padding:"28px 0",textAlign:"center",lineHeight:1.9}}>
+              No baselines yet.<br/>
+              Click <span style={{color:C.yellow,fontWeight:700}}>"⊙ Snap Baseline"</span> to freeze the current schedule.<br/>
+              <span style={{fontSize:9,color:C.dim}}>Each snapshot captures project dates + all task dates — drift is always measured against that frozen point, not the moving current value.</span>
             </div>
           )}
           {(proj.baselines||[]).map(bl=>(
             <div key={bl.id} style={{background:C.card2,border:`1px solid ${C.border}`,borderRadius:8,marginBottom:8,overflow:"hidden"}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"9px 13px",cursor:"pointer"}}
                 onClick={()=>setShowBlId(showBlId===bl.id?null:bl.id)}>
-                <span style={{fontSize:11,color:C.yellow,fontFamily:"'JetBrains Mono',monospace",fontWeight:700}}>Snap {bl.label}</span>
-                <span style={{fontSize:9,color:C.muted}}>{showBlId===bl.id?"v":">"} {bl.snapshot.length} tasks</span>
+                <div>
+                  <span style={{fontSize:11,color:C.yellow,fontFamily:"'JetBrains Mono',monospace",fontWeight:700}}>{bl.label}</span>
+                  {bl.takenAt&&<span style={{fontSize:8,color:C.dim,fontFamily:"'JetBrains Mono',monospace",marginLeft:10}}>
+                    taken {new Date(bl.takenAt).toLocaleString()}
+                  </span>}
+                </div>
+                <span style={{fontSize:9,color:C.muted}}>{showBlId===bl.id?"▼":"▶"} {bl.snapshot.length} tasks</span>
               </div>
               <Collapse open={showBlId===bl.id}>
-                <div style={{padding:"8px 13px"}}>
-                  <div style={{display:"grid",gridTemplateColumns:"1fr 82px 82px 50px 80px",gap:6,padding:"3px 0 6px",borderBottom:`1px solid ${C.border}`,marginBottom:4}}>
-                    {["TASK","BL START","BL END","PROG","DRIFT"].map(h=><div key={h} style={St.lbl}>{h}</div>)}
+                <div style={{padding:"8px 13px 13px"}}>
+                  {/* Project-level snapshot block */}
+                  {bl.projectSnapshot&&(()=>{
+                    const ps=bl.projectSnapshot;
+                    const endDrift=diffD(ps.end,proj.end);
+                    const startDrift=diffD(ps.start,proj.start);
+                    return (
+                      <div style={{background:`${C.yellow}0c`,border:`1px solid ${C.yellow}33`,borderRadius:6,padding:"10px 12px",marginBottom:12}}>
+                        <div style={{fontSize:8,color:C.yellow,fontFamily:"'JetBrains Mono',monospace",fontWeight:700,letterSpacing:"0.12em",marginBottom:8}}>PROJECT SNAPSHOT</div>
+                        <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8,marginBottom:8}}>
+                          {[["BL Start",ps.start],["BL End",ps.end],["BL Progress",`${ps.progress??0}%`],["BL Hours",`${ps.assignedHrs?.toFixed(1)??"?"}h`]].map(([l,v])=>(
+                            <div key={l}><div style={{fontSize:7,color:C.dim,fontFamily:"'JetBrains Mono',monospace"}}>{l}</div>
+                              <div style={{fontSize:11,fontWeight:700,color:C.yellow,fontFamily:"'JetBrains Mono',monospace"}}>{v}</div></div>
+                          ))}
+                        </div>
+                        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,fontSize:9,fontFamily:"'JetBrains Mono',monospace"}}>
+                          <span style={{color:C.muted}}>Current: {proj.start} → {proj.end}</span>
+                          <span style={{color:endDrift===0?C.green:endDrift>0?C.red:C.green,fontWeight:700}}>
+                            End drift: {endDrift===0?"none":`${endDrift>0?"+":""}${endDrift}d`}
+                            {startDrift!==0&&<span style={{color:C.orange}}> · Start: {startDrift>0?"+":""}{startDrift}d</span>}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                  {/* Task table */}
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 82px 82px 82px 50px 70px",gap:6,padding:"3px 0 6px",borderBottom:`1px solid ${C.border}`,marginBottom:4}}>
+                    {["TASK","BL START","BL END","CURR END","BL%","DRIFT"].map(h=><div key={h} style={St.lbl}>{h}</div>)}
                   </div>
                   {bl.snapshot.map(snap=>{
                     const live=proj.tasks.find(t=>t.id===snap.id);
                     const ed=live?diffD(snap.end,live.end):null;
                     return (
-                      <div key={snap.id} style={{display:"grid",gridTemplateColumns:"1fr 82px 82px 50px 80px",gap:6,padding:"4px 0",borderBottom:`1px solid ${C.border}11`,alignItems:"center"}}>
-                        <span style={{fontSize:10,color:C.text,fontFamily:"'JetBrains Mono',monospace"}}>{snap.name}</span>
+                      <div key={snap.id} style={{display:"grid",gridTemplateColumns:"1fr 82px 82px 82px 50px 70px",gap:6,padding:"4px 0",borderBottom:`1px solid ${C.border}11`,alignItems:"center"}}>
+                        <span style={{fontSize:10,color:live?C.text:C.dim,fontFamily:"'JetBrains Mono',monospace",fontStyle:live?"normal":"italic",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{snap.name}</span>
                         <span style={{fontSize:9,color:C.muted,fontFamily:"'JetBrains Mono',monospace"}}>{snap.start}</span>
                         <span style={{fontSize:9,color:C.muted,fontFamily:"'JetBrains Mono',monospace"}}>{snap.end}</span>
-                        <span style={{fontSize:9,color:C.muted,fontFamily:"'JetBrains Mono',monospace"}}>{snap.progress}%</span>
-                        <span style={{fontSize:9,fontFamily:"'JetBrains Mono',monospace",
-                          color:!live?"#555":ed===0?C.green:ed>0?C.red:C.green}}>
+                        <span style={{fontSize:9,color:live?C.text:C.dim,fontFamily:"'JetBrains Mono',monospace"}}>{live?live.end:"—"}</span>
+                        <span style={{fontSize:9,color:C.muted,fontFamily:"'JetBrains Mono',monospace"}}>{snap.progress??0}%</span>
+                        <span style={{fontSize:9,fontWeight:700,fontFamily:"'JetBrains Mono',monospace",
+                          color:!live?C.dim:ed===0?C.green:ed>0?C.red:C.green}}>
                           {!live?"deleted":ed===0?"on track":`${ed>0?"+":""}${ed}d`}
                         </span>
                       </div>
@@ -1419,8 +1563,22 @@ function SpacesTab({spaces,setSpaces,searchQ,pushUndo,sendToVoid}){
   const addTask      = (sid,prid) => { const nt=mkTask(uid(),"New Task",fmtD(TODAY),fmtD(addD(TODAY,14)),1,0,"Not Started"); updProj(sid,prid,pr=>({tasks:[...pr.tasks,nt]})); };
   const addSub       = (sid,prid,tid) => { const ns=mkSub(uid(),"New Subtask",fmtD(TODAY),fmtD(addD(TODAY,7)),1,0,"Not Started"); updTask(sid,prid,tid,t=>({subtasks:[...t.subtasks,ns]})); };
   const takeBaseline = (sid,prid) => updProj(sid,prid,pr=>({baselines:[...(pr.baselines||[]),{
-    id:uid(), label:`BL${(pr.baselines||[]).length+1}.${new Date().toLocaleDateString("en-US",{month:"short",day:"numeric"})}`,
-    snapshot:pr.tasks.map(t=>({id:t.id,name:t.name,start:t.start,end:t.end,progress:t.progress,subtasks:(t.subtasks||[]).map(s=>({id:s.id,name:s.name,start:s.start,end:s.end,progress:s.progress}))}))
+    id:uid(),
+    takenAt: new Date().toISOString(),
+    label:`BL${(pr.baselines||[]).length+1} · ${new Date().toLocaleDateString("en-US",{month:"short",day:"numeric",year:"2-digit"})}`,
+    // *** Project-level snapshot — what was missing ***
+    projectSnapshot:{
+      start:pr.start, end:pr.end,
+      status:pr.status, priority:pr.priority,
+      progress:projProg(pr),
+      assignedHrs:projAssigned(pr),
+    },
+    // Task + subtask snapshot
+    snapshot:pr.tasks.map(t=>({
+      id:t.id, name:t.name, start:t.start, end:t.end,
+      progress:taskProg(t), status:t.status,
+      subtasks:(t.subtasks||[]).map(s=>({id:s.id,name:s.name,start:s.start,end:s.end,progress:s.progress}))
+    }))
   }]}));
 
   /* -- clipboard copy/paste -- */
@@ -1886,19 +2044,12 @@ function TodayFocus({spaces}){
 /* ==========================================================
    GANTT TAB
 ========================================================== */
-function GanttTab({spaces}){
+function GanttTab({spaces,selSpaces,setSelSpaces,selPortfolios,setSelPortfolios,selProjs,setSelProjs,
+    rangeStart,setRangeStart,totalDays,setTotalDays,dateFrom,setDateFrom,dateTo,setDateTo,ganttYear,setGanttYear,onResetFilters}){
   const LABEL=210; const CW=660;
-  const [rangeStart,setRangeStart] = useState(new Date(2026,0,1));
-  const [totalDays,setTotalDays]   = useState(90);
-  const [selSpaces,setSelSpaces] = useState(new Set(["all"]));
-  const [selPortfolios,setSelPortfolios] = useState(new Set(["all"]));
-  const [selProjs,setSelProjs]  = useState(new Set(["all"]));
   const [showFilters,setShowFilters] = useState(false);
-  const [expanded,setExpanded]     = useState({});
-  const [blSel,setBlSel]           = useState({});
-  const [dateFrom,setDateFrom]     = useState("2026-01-01");
-  const [dateTo,setDateTo]         = useState("2026-03-31");
-  const [ganttYear,setGanttYear]   = useState(2026);
+  const [expanded,setExpanded]       = useState({});
+  const [blSel,setBlSel]             = useState({});
   const ganttRef = useRef(null);
   const panRef   = useRef({active:false,startX:0,startOff:0});
 
@@ -2101,7 +2252,9 @@ function GanttTab({spaces}){
                 ))}
               </div>
               <button onClick={()=>{setSelSpaces(new Set(["all"]));setSelPortfolios(new Set(["all"]));setSelProjs(new Set(["all"]));}}
-                style={{...St.ghost,fontSize:9,padding:"4px 10px",color:C.dim,width:"100%",marginTop:4}}>Reset Filters</button>
+                style={{...St.ghost,fontSize:9,padding:"4px 10px",color:C.dim,width:"100%",marginTop:4}}>Clear Selections</button>
+              <button onClick={()=>{onResetFilters();setShowFilters(false);}}
+                style={{...St.btn,fontSize:9,padding:"5px 10px",width:"100%",marginTop:6,background:C.cyan+"22",color:C.cyan,border:`1px solid ${C.cyan}44`}}>↺ Reset All Filters</button>
             </div>
           )}
         </div>
@@ -2258,16 +2411,10 @@ function GanttTab({spaces}){
 /* ==========================================================
    CAPACITY TAB
 ========================================================== */
-function CapacityTab({spaces}){
-  const [viewMode,setViewMode]    = useState("week"); // "week" | "range" | "month"
-  const [rangeW,setRangeW]        = useState(1);
-  const [weekOff,setWeekOff]      = useState(0);
-  const [monthOff,setMonthOff]    = useState(0);
-  const [dateFrom,setDateFrom]    = useState(fmtD(TODAY));
-  const [dateTo,setDateTo]        = useState(fmtD(addD(TODAY,13)));
-  const [filterSpaceId,setFilterSpaceId] = useState("all");
-  const [filterPortfolioId,setFilterPortfolioId]   = useState("all");
-  const [dayDetail,setDayDetail]     = useState(null);
+function CapacityTab({spaces,viewMode,setViewMode,rangeW,setRangeW,weekOff,setWeekOff,monthOff,setMonthOff,
+    dateFrom,setDateFrom,dateTo,setDateTo,filterSpaceId,setFilterSpaceId,filterPortfolioId,setFilterPortfolioId,onResetFilters}){
+  const [dayDetail,setDayDetail]       = useState(null);
+  const [expandedProj,setExpandedProj] = useState({});
   const CAP=8;
 
   const activeSpaces  = useMemo(()=>spaces.filter(p=>!p.archived),[spaces]);
@@ -2368,8 +2515,6 @@ function CapacityTab({spaces}){
     const d=new Date(TODAY.getFullYear(),TODAY.getMonth()+monthOff,1);
     return d.toLocaleDateString("en-US",{month:"long",year:"numeric"});
   },[monthOff]);
-
-  const [expandedProj,setExpandedProj] = useState({});
 
   return (
     <div>
@@ -2480,6 +2625,10 @@ function CapacityTab({spaces}){
           <button onClick={()=>setMonthOff(0)} style={{...St.ghost,padding:"5px 9px",color:C.cyan}}>This Month</button>
           <button onClick={()=>setMonthOff(o=>o+1)} style={{...St.ghost,padding:"5px 9px"}}>&gt;</button>
         </>}
+
+        {/* Reset */}
+        <button onClick={onResetFilters} title="Reset all capacity filters"
+          style={{...St.ghost,padding:"5px 10px",fontSize:9,color:C.dim,marginLeft:"auto",whiteSpace:"nowrap"}}>↺ Reset</button>
       </div>
 
       {/* Period summary cards */}
@@ -2625,9 +2774,9 @@ function CapacityTab({spaces}){
 /* ==========================================================
    CALENDAR TAB
 ========================================================== */
-function CalendarTab({spaces}){
-  const [month,setMonth]       = useState(new Date(2026,1,1));
-  const [filterPortfolioId,setFilterPortfolioId] = useState("all");
+function CalendarTab({spaces,filterSpaceId,setFilterSpaceId,filterPortfolioId,setFilterPortfolioId,onResetFilters}){
+  const [month,setMonth]           = useState(()=>new Date(TODAY.getFullYear(),TODAY.getMonth(),1));
+  const [filterSpaceIdLocal]       = [filterSpaceId]; // alias for clarity
   const [events,setEvents]     = useState([
     {id:"e1",date:"2026-02-16",title:"Python: OOP",type:"remote"},
     {id:"e2",date:"2026-02-17",title:"Jiu Jitsu",type:"bjj"},
@@ -2642,27 +2791,31 @@ function CalendarTab({spaces}){
 
   const typeC={remote:C.cyan,japanese:C.purple,bjj:C.orange,strength:C.green,cardio:C.pink,personal:C.teal,project:C.blue,task:C.yellow};
 
+  const allSpaces = useMemo(()=>spaces.filter(p=>!p.archived),[spaces]);
+
   const allPortfolios = useMemo(()=>
-    spaces.flatMap(p=>p.portfolios.filter(s=>!s.archived).map(s=>({...s,spaceName:p.name,spaceColor:p.color})))
-  ,[spaces]);
+    allSpaces.flatMap(p=>p.portfolios.filter(s=>!s.archived).map(s=>({...s,spaceName:p.name,spaceColor:p.color,spaceId:p.id})))
+  ,[allSpaces]);
+
+  const filteredPortfoliosForCal = useMemo(()=>
+    filterSpaceId==="all" ? allPortfolios : allPortfolios.filter(s=>s.spaceId===filterSpaceId)
+  ,[filterSpaceId,allPortfolios]);
 
   /* Derive project/task items from portfolio data */
   const portfolioEvents = useMemo(()=>{
     const ev=[];
-    spaces.forEach(po=>po.portfolios.filter(s=>!s.archived).forEach(sp=>{
+    filteredPortfoliosForCal.forEach(sp=>{
       if(filterPortfolioId!=="all"&&sp.id!==filterPortfolioId) return;
       sp.projects.filter(p=>!p.archived).forEach(pr=>{
-        // Project start/end markers
-        ev.push({id:`pe_${pr.id}_s`,date:pr.start,title:`? ${pr.name}`,type:"project",projColor:pr.color,portfolioName:sp.name,isPortfolio:true});
-        ev.push({id:`pe_${pr.id}_e`,date:pr.end,title:`? ${pr.name}`,type:"project",projColor:pr.color,portfolioName:sp.name,isPortfolio:true});
-        // Tasks due
+        ev.push({id:`pe_${pr.id}_s`,date:pr.start,title:`${pr.name}`,type:"project",projColor:pr.color,portfolioName:sp.name,isPortfolio:true});
+        ev.push({id:`pe_${pr.id}_e`,date:pr.end,  title:`${pr.name}`,type:"project",projColor:pr.color,portfolioName:sp.name,isPortfolio:true});
         (pr.tasks||[]).filter(t=>!t.archived).forEach(t=>{
           ev.push({id:`te_${t.id}`,date:t.end,title:t.name,type:"task",projColor:pr.color,portfolioName:sp.name,projName:pr.name,isPortfolio:true});
         });
       });
-    }));
+    });
     return ev;
-  },[spaces,filterPortfolioId]);
+  },[filteredPortfoliosForCal,filterPortfolioId]);
 
   const dIM = new Date(month.getFullYear(),month.getMonth()+1,0).getDate();
   const fDow = new Date(month.getFullYear(),month.getMonth(),1).getDay();
@@ -2841,11 +2994,19 @@ function CalendarTab({spaces}){
           <button onClick={()=>setMonth(new Date(TODAY.getFullYear(),TODAY.getMonth(),1))} style={{...St.ghost,padding:"5px 9px",color:C.cyan}}>Today</button>
         </div>
         <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
+          {/* Space filter — new in v7.3.0 */}
+          <select value={filterSpaceId} onChange={e=>{setFilterSpaceId(e.target.value);setFilterPortfolioId("all");}}
+            style={{...St.inp,width:"auto",padding:"4px 8px",fontSize:10}}>
+            <option value="all">All Spaces</option>
+            {allSpaces.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
           <select value={filterPortfolioId} onChange={e=>setFilterPortfolioId(e.target.value)}
             style={{...St.inp,width:"auto",padding:"4px 8px",fontSize:10}}>
             <option value="all">All Portfolios</option>
-            {allPortfolios.map(s=><option key={s.id} value={s.id}>{s.spaceName} &gt; {s.name}</option>)}
+            {filteredPortfoliosForCal.map(s=><option key={s.id} value={s.id}>{s.spaceName} &gt; {s.name}</option>)}
           </select>
+          <button onClick={onResetFilters} title="Reset calendar filters"
+            style={{...St.ghost,padding:"5px 9px",fontSize:9,color:C.dim}}>↺ Reset</button>
           <button onClick={()=>downloadICS(events.filter(e=>e.date.startsWith(`${month.getFullYear()}-${String(month.getMonth()+1).padStart(2,"0")}`)),`cal_${month.getFullYear()}_${month.getMonth()+1}.ics`)}
             style={{...St.ghost,padding:"5px 9px",fontSize:9,color:C.purple,borderColor:`${C.purple}44`}}>v .ics this month</button>
           <button onClick={()=>downloadICS(events,"prj_mgmt_all.ics")}
@@ -3266,17 +3427,59 @@ const NAV = [
 
 export default function App(){
   const [tab,setTab]                 = useState("spaces");
-  const [spaces,setSpaces]   = useState(()=>loadLS()||INIT);
+  const [spaces,setSpaces]           = useState(()=>loadLS()||INIT);
   const [searchQ,setSearchQ]         = useState("");
   const [saved,setSaved]             = useState(false);
   const [showDataMgr,setShowDataMgr] = useState(false);
   const [gistStatus,setGistStatus]   = useState("not configured");
   const [gistSyncing,setGistSyncing] = useState(false);
-  const [theVoid,setTheVoid]         = useState([]); // deleted items {id,type,name,path,deletedAt,data,restoreFn}
-  const [undoStack,setUndoStack]     = useState([]); // last 8 spaces snapshots
-  const [undoBanner,setUndoBanner]   = useState(null); // {msg, timeout}
-  const saveTimer  = useRef(null);
-  const gistTimer  = useRef(null);
+  const [theVoid,setTheVoid]         = useState([]);
+  const [undoStack,setUndoStack]     = useState([]);
+  const [undoBanner,setUndoBanner]   = useState(null);
+
+  // ── PERSISTENT FILTER STATE ── lifted here so switching tabs never resets them ──
+
+  // Gantt
+  const [gSelSpaces,setGSelSpaces]       = useState(new Set(["all"]));
+  const [gSelPorts,setGSelPorts]         = useState(new Set(["all"]));
+  const [gSelProjs,setGSelProjs]         = useState(new Set(["all"]));
+  const [gRangeStart,setGRangeStart]     = useState(()=>{ const q=Math.floor(TODAY.getMonth()/3); return new Date(TODAY.getFullYear(),q*3,1); });
+  const [gTotalDays,setGTotalDays]       = useState(()=>{ const q=Math.floor(TODAY.getMonth()/3); const s=new Date(TODAY.getFullYear(),q*3,1),e=new Date(TODAY.getFullYear(),q*3+3,0); return diffD(fmtD(s),fmtD(e)); });
+  const [gDateFrom,setGDateFrom]         = useState(()=>{ const q=Math.floor(TODAY.getMonth()/3); return fmtD(new Date(TODAY.getFullYear(),q*3,1)); });
+  const [gDateTo,setGDateTo]             = useState(()=>{ const q=Math.floor(TODAY.getMonth()/3); return fmtD(new Date(TODAY.getFullYear(),q*3+3,0)); });
+  const [gYear,setGYear]                 = useState(TODAY.getFullYear());
+  const resetGantt = useCallback(()=>{
+    setGSelSpaces(new Set(["all"])); setGSelPorts(new Set(["all"])); setGSelProjs(new Set(["all"]));
+    const q=Math.floor(TODAY.getMonth()/3);
+    const s=new Date(TODAY.getFullYear(),q*3,1), e=new Date(TODAY.getFullYear(),q*3+3,0);
+    setGRangeStart(s); setGTotalDays(diffD(fmtD(s),fmtD(e)));
+    setGDateFrom(fmtD(s)); setGDateTo(fmtD(e)); setGYear(TODAY.getFullYear());
+  },[]);
+
+  // Capacity
+  const [cViewMode,setCViewMode]         = useState("week");
+  const [cRangeW,setCRangeW]             = useState(1);
+  const [cWeekOff,setCWeekOff]           = useState(0);
+  const [cMonthOff,setCMonthOff]         = useState(0);
+  const [cDateFrom,setCDateFrom]         = useState(fmtD(TODAY));
+  const [cDateTo,setCDateTo]             = useState(fmtD(addD(TODAY,13)));
+  const [cSpaceId,setCSpaceId]           = useState("all");
+  const [cPortId,setCPortId]             = useState("all");
+  const resetCapacity = useCallback(()=>{
+    setCViewMode("week"); setCRangeW(1); setCWeekOff(0); setCMonthOff(0);
+    setCDateFrom(fmtD(TODAY)); setCDateTo(fmtD(addD(TODAY,13)));
+    setCSpaceId("all"); setCPortId("all");
+  },[]);
+
+  // Calendar
+  const [calSpaceId,setCalSpaceId]       = useState("all");
+  const [calPortId,setCalPortId]         = useState("all");
+  const resetCalendar = useCallback(()=>{
+    setCalSpaceId("all"); setCalPortId("all");
+  },[]);
+
+  const saveTimer = useRef(null);
+  const gistTimer = useRef(null);
 
   const voidCount = theVoid.length;
 
@@ -3368,7 +3571,7 @@ export default function App(){
           <div style={{width:26,height:26,borderRadius:6,background:`linear-gradient(135deg,${C.cyan},${C.blue})`,display:"flex",alignItems:"center",justifyContent:"center",boxShadow:`0 0 12px ${C.cyan}44`,fontSize:12,fontWeight:800,color:"#07090f"}}>*</div>
           <div style={{display:"flex",flexDirection:"column",gap:0}}>
             <span style={{fontSize:11,fontWeight:800,color:C.text,fontFamily:"'Syne',sans-serif",letterSpacing:"0.05em",lineHeight:1.1}}>PRJ_MGMT</span>
-            <span style={{fontSize:7,color:C.dim,fontFamily:"'JetBrains Mono',monospace",lineHeight:1.1}}>v7.2.0</span>
+            <span style={{fontSize:7,color:C.dim,fontFamily:"'JetBrains Mono',monospace",lineHeight:1.1}}>v7.3.0</span>
           </div>
         </div>
 
@@ -3440,9 +3643,30 @@ export default function App(){
       <div className="main-pad" style={{padding:20,maxWidth:1600,margin:"0 auto"}}>
         {tab==="spaces"   &&<SpacesTab   spaces={spaces} setSpaces={setSpaces} searchQ={searchQ} pushUndo={pushUndo} sendToVoid={sendToVoid}/>}
         {tab==="today"    &&<TodayFocus  spaces={spaces}/>}
-        {tab==="gantt"    &&<GanttTab    spaces={spaces}/>}
-        {tab==="capacity" &&<CapacityTab spaces={spaces}/>}
-        {tab==="calendar" &&<CalendarTab spaces={spaces}/>}
+        {tab==="gantt"    &&<GanttTab    spaces={spaces}
+            selSpaces={gSelSpaces}   setSelSpaces={setGSelSpaces}
+            selPortfolios={gSelPorts} setSelPortfolios={setGSelPorts}
+            selProjs={gSelProjs}     setSelProjs={setGSelProjs}
+            rangeStart={gRangeStart} setRangeStart={setGRangeStart}
+            totalDays={gTotalDays}   setTotalDays={setGTotalDays}
+            dateFrom={gDateFrom}     setDateFrom={setGDateFrom}
+            dateTo={gDateTo}         setDateTo={setGDateTo}
+            ganttYear={gYear}        setGanttYear={setGYear}
+            onResetFilters={resetGantt}/>}
+        {tab==="capacity" &&<CapacityTab spaces={spaces}
+            viewMode={cViewMode}     setViewMode={setCViewMode}
+            rangeW={cRangeW}         setRangeW={setCRangeW}
+            weekOff={cWeekOff}       setWeekOff={setCWeekOff}
+            monthOff={cMonthOff}     setMonthOff={setCMonthOff}
+            dateFrom={cDateFrom}     setDateFrom={setCDateFrom}
+            dateTo={cDateTo}         setDateTo={setCDateTo}
+            filterSpaceId={cSpaceId} setFilterSpaceId={setCSpaceId}
+            filterPortfolioId={cPortId} setFilterPortfolioId={setCPortId}
+            onResetFilters={resetCapacity}/>}
+        {tab==="calendar" &&<CalendarTab spaces={spaces}
+            filterSpaceId={calSpaceId}   setFilterSpaceId={setCalSpaceId}
+            filterPortfolioId={calPortId} setFilterPortfolioId={setCalPortId}
+            onResetFilters={resetCalendar}/>}
         {tab==="archive"  &&<ArchiveTab  spaces={spaces} setSpaces={setSpaces}/>}
         {tab==="void"     &&<TheVoidTab  theVoid={theVoid} setTheVoid={setTheVoid} spaces={spaces} setSpaces={setSpaces}/>}
       </div>
