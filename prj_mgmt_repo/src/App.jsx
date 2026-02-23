@@ -1,4 +1,4 @@
-// v7.0
+// v8.0
 import React, { useState, useMemo, useRef, useCallback, useEffect } from "react";
 
 /* ==========================================================
@@ -16,6 +16,32 @@ const CSS = `
   @keyframes fu{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
   .fu{animation:fu 0.18s ease forwards}
   .drag-over{outline:2px dashed #38bdf8 !important;outline-offset:2px;border-radius:6px}
+
+  /* === RESPONSIVE === */
+  /* Desktop default: full table layout */
+  .task-grid{display:grid;grid-template-columns:14px 1fr 82px 82px 72px 52px 52px 60px 94px 58px 52px 72px;gap:4px;padding:5px 0;border-bottom:1px solid #1a223622;align-items:center;min-width:800px}
+  .task-grid-header{display:grid;grid-template-columns:14px 1fr 82px 82px 72px 52px 52px 60px 94px 58px 52px 72px;gap:4px;padding:3px 0 6px;border-bottom:1px solid #1a2236}
+
+  /* Tablet: hide hours columns */
+  @media(max-width:1024px){
+    .hide-tablet{display:none!important}
+    .task-grid,.task-grid-header{grid-template-columns:14px 1fr 82px 82px 72px 60px 94px 72px;min-width:600px}
+  }
+
+  /* Mobile: card layout instead of table */
+  @media(max-width:640px){
+    .desktop-only{display:none!important}
+    .mobile-only{display:flex!important}
+    .task-grid,.task-grid-header{display:none!important}
+    .task-card{display:flex!important;flex-direction:column;padding:10px 12px;border:1px solid #1a2236;border-radius:8px;margin-bottom:6px;background:#0f1520}
+    .nav-label{display:none}
+    .main-pad{padding:10px!important}
+    .sidebar-grid{grid-template-columns:1fr!important}
+    .stats-bar{display:none!important}
+    .search-bar{width:120px!important}
+  }
+  .mobile-only{display:none}
+  .task-card{display:none}
 `;
 
 const C = {
@@ -510,7 +536,7 @@ const WDAYS = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
 ========================================================== */
 function toICSDate(dateStr) { return dateStr.replace(/-/g,""); }
 function buildICS(events) {
-  const lines=["BEGIN:VCALENDAR","VERSION:2.0","PRODID:-//PRJ_MGMT_V7//EN","CALSCALE:GREGORIAN","METHOD:PUBLISH"];
+  const lines=["BEGIN:VCALENDAR","VERSION:2.0","PRODID:-//PRJ_MGMT_V6//EN","CALSCALE:GREGORIAN","METHOD:PUBLISH"];
   events.forEach(ev=>{
     lines.push("BEGIN:VEVENT",`UID:${ev.id}@prjmgmt`,`DTSTART;VALUE=DATE:${toICSDate(ev.date)}`,
       `DTEND;VALUE=DATE:${toICSDate(ev.date)}`,`SUMMARY:${ev.title}`,`CATEGORIES:${ev.type||""}`,`STATUS:CONFIRMED`,"END:VEVENT");
@@ -1209,7 +1235,7 @@ function ProjCtxMenu({pr,sp,onCopy,onFlag,onArchive,onDelete,onClose}){
   return <CtxMenu onClose={onClose} items={items}/>;
 }
 
-function SpacesTab({spaces,setSpaces,searchQ}){
+function SpacesTab({spaces,setSpaces,searchQ,pushUndo,sendToVoid}){
   const [activeSpId,    setActiveSpId]    = useState(spaces[0]?.id);
   const [activePortId,   setActivePortId]   = useState(null);
   const [activeProjId, setActiveProjId] = useState(null);
@@ -1256,8 +1282,17 @@ function SpacesTab({spaces,setSpaces,searchQ}){
     ask("Archive space?","Hides this space. All data preserved.",
       ()=>{ setSpaces(ps=>ps.map(x=>x.id===pid?{...x,archived:true}:x)); if(activeSpId===pid&&spaces.length>1) setActiveSpId(spaces.find(x=>x.id!==pid)?.id); setConfirm(null); });
   };
-  const deleteSpace  = pid => ask("Delete space?","Permanently removes this space and ALL spaces, projects, tasks and subtasks inside it.",
-    ()=>{ setSpaces(ps=>ps.filter(x=>x.id!==pid)); if(activeSpId===pid) setActiveSpId(spaces.find(x=>x.id!==pid)?.id); setConfirm(null); });
+  const deleteSpace  = pid => {
+    const sp = spaces.find(x=>x.id===pid);
+    ask("Delete space?","Permanently removes this space and ALL its portfolios, projects, tasks and subtasks.", ()=>{
+      const snap = deepCopy(spaces);
+      const vItem = sendToVoid&&sendToVoid("space", sp?.name||"Space", "(top level)", sp);
+      setSpaces(ps=>ps.filter(x=>x.id!==pid));
+      if(activeSpId===pid) setActiveSpId(spaces.find(x=>x.id!==pid)?.id);
+      setConfirm(null);
+      pushUndo&&pushUndo(`Deleted space "${sp?.name}"`, snap, vItem);
+    });
+  };
   const addPortfolio     = () => { const ns=mkPortfolio(uid(),"New Portfolio",port.color,[]); updSpace(p=>({portfolios:[...p.portfolios,ns]})); setActivePortId(ns.id); };
   const addProject   = sid => { const np=mkProj(uid(),"New Project",fmtD(TODAY),fmtD(addD(TODAY,30)),"Not Started","Medium",port.color); updPortfolio(sid,s=>({projects:[...s.projects,np]})); setActiveProjId(np.id); setActivePortId(sid); };
   const addTask      = (sid,prid) => { const nt=mkTask(uid(),"New Task",fmtD(TODAY),fmtD(addD(TODAY,14)),1,0,"Not Started"); updProj(sid,prid,pr=>({tasks:[...pr.tasks,nt]})); };
@@ -1293,16 +1328,32 @@ function SpacesTab({spaces,setSpaces,searchQ}){
   const ask = (msg,detail,onConfirm) => setConfirm({msg,detail,onConfirm});
 
   /* -- delete / archive -- */
-  const deleteProject  = (sid,prid) => ask("Delete project?","Permanently removes the project, all tasks, and subtasks.",
-    ()=>{ updPortfolio(sid,s=>({projects:s.projects.filter(pr=>pr.id!==prid)})); setActiveProjId(null); setConfirm(null); });
+  const deleteProject  = (sid,prid) => {
+    const pr = port?.portfolios.find(s=>s.id===sid)?.projects.find(p=>p.id===prid);
+    ask("Delete project?","Permanently removes the project, all tasks, and subtasks.", ()=>{
+      const snap = deepCopy(spaces);
+      const vItem = sendToVoid&&sendToVoid("project", pr?.name||"Project", `${port?.name} › ${port?.portfolios.find(s=>s.id===sid)?.name}`, pr);
+      updPortfolio(sid,s=>({projects:s.projects.filter(p=>p.id!==prid)}));
+      setActiveProjId(null); setConfirm(null);
+      pushUndo&&pushUndo(`Deleted project "${pr?.name}"`, snap, vItem);
+    });
+  };
   const archiveProject = (sid,prid) => {
     const pr=port?.portfolios.find(s=>s.id===sid)?.projects.find(p=>p.id===prid);
     if(pr?.archived){ updProj(sid,prid,()=>({archived:false})); return; }
     ask("Archive project?","Hidden from view but fully recoverable.",
       ()=>{ updProj(sid,prid,()=>({archived:true})); if(activeProjId===prid)setActiveProjId(null); setConfirm(null); });
   };
-  const deletePortfolio  = sid => ask("Delete portfolio?","Permanently removes this portfolio and ALL its projects, tasks, and subtasks.",
-    ()=>{ updSpace(p=>({portfolios:p.portfolios.filter(s=>s.id!==sid)})); if(activePortId===sid){setActivePortId(null);setActiveProjId(null);} setConfirm(null); });
+  const deletePortfolio = sid => {
+    const sp = port?.portfolios.find(s=>s.id===sid);
+    ask("Delete portfolio?","Permanently removes this portfolio and ALL its projects, tasks, and subtasks.", ()=>{
+      const snap = deepCopy(spaces);
+      const vItem = sendToVoid&&sendToVoid("portfolio", sp?.name||"Portfolio", port?.name||"", sp);
+      updSpace(p=>({portfolios:p.portfolios.filter(s=>s.id!==sid)}));
+      if(activePortId===sid){setActivePortId(null);setActiveProjId(null);} setConfirm(null);
+      pushUndo&&pushUndo(`Deleted portfolio "${sp?.name}"`, snap, vItem);
+    });
+  };
   const archivePortfolio = sid => {
     const sp=port?.portfolios.find(s=>s.id===sid);
     if(sp?.archived){ updPortfolio(sid,()=>({archived:false})); return; }
@@ -1319,9 +1370,28 @@ function SpacesTab({spaces,setSpaces,searchQ}){
     updSpace(p=>({portfolios:[...p.portfolios,newSp]}));
     setActivePortId(newSp.id);
   };
-  const deleteTask   = (sid,prid,tid) => { const t=port?.portfolios.find(s=>s.id===sid)?.projects.find(p=>p.id===prid)?.tasks.find(t=>t.id===tid); const sc=(t?.subtasks||[]).length; ask("Delete task?",sc?`Will also delete ${sc} subtask${sc>1?"s":""}.`:"Task permanently removed.",()=>{ updProj(sid,prid,pr=>({tasks:pr.tasks.filter(t=>t.id!==tid)})); setConfirm(null); }); };
+  const deleteTask   = (sid,prid,tid) => {
+    const t=port?.portfolios.find(s=>s.id===sid)?.projects.find(p=>p.id===prid)?.tasks.find(t=>t.id===tid);
+    const pr=port?.portfolios.find(s=>s.id===sid)?.projects.find(p=>p.id===prid);
+    const sc=(t?.subtasks||[]).length;
+    ask("Delete task?",sc?`Will also delete ${sc} subtask${sc>1?"s":""}.`:"Task permanently removed.",()=>{
+      const snap=deepCopy(spaces);
+      const vItem=sendToVoid&&sendToVoid("task",t?.name||"Task",`${port?.name} › ${port?.portfolios.find(s=>s.id===sid)?.name} › ${pr?.name}`,t);
+      updProj(sid,prid,pr=>({tasks:pr.tasks.filter(t=>t.id!==tid)})); setConfirm(null);
+      pushUndo&&pushUndo(`Deleted task "${t?.name}"`,snap,vItem);
+    });
+  };
   const archiveTask  = (sid,prid,tid) => { const t=port?.portfolios.find(s=>s.id===sid)?.projects.find(p=>p.id===prid)?.tasks.find(t=>t.id===tid); if(t?.archived){ updTask(sid,prid,tid,()=>({archived:false})); return; } updTask(sid,prid,tid,()=>({archived:true})); };
-  const deleteSub    = (sid,prid,tid,stid) => ask("Delete subtask?","Permanently removed.",()=>{ updTask(sid,prid,tid,t=>({subtasks:t.subtasks.filter(s=>s.id!==stid)})); setConfirm(null); });
+  const deleteSub    = (sid,prid,tid,stid) => {
+    const st=port?.portfolios.find(s=>s.id===sid)?.projects.find(p=>p.id===prid)?.tasks.find(t=>t.id===tid)?.subtasks.find(s=>s.id===stid);
+    const t=port?.portfolios.find(s=>s.id===sid)?.projects.find(p=>p.id===prid)?.tasks.find(t=>t.id===tid);
+    ask("Delete subtask?","Permanently removed.",()=>{
+      const snap=deepCopy(spaces);
+      const vItem=sendToVoid&&sendToVoid("subtask",st?.name||"Subtask",`... › ${t?.name}`,st);
+      updTask(sid,prid,tid,t=>({subtasks:t.subtasks.filter(s=>s.id!==stid)})); setConfirm(null);
+      pushUndo&&pushUndo(`Deleted subtask "${st?.name}"`,snap,vItem);
+    });
+  };
   const archiveSub   = (sid,prid,tid,stid) => { const st=port?.portfolios.find(s=>s.id===sid)?.projects.find(p=>p.id===prid)?.tasks.find(t=>t.id===tid)?.subtasks.find(s=>s.id===stid); updSub(sid,prid,tid,stid,()=>({archived:!st?.archived})); };
 
   /* -- reorder -- */
@@ -1364,20 +1434,22 @@ function SpacesTab({spaces,setSpaces,searchQ}){
                 <InlineEdit value={p.name} onChange={nm=>setSpaces(ps=>ps.map(x=>x.id===p.id?{...x,name:nm}:x))}
                   style={{color:"inherit",fontSize:10}}/>
               </button>
-              <button onClick={e=>{e.stopPropagation();setSpaceMenu(spaceMenu===p.id?null:p.id);}}
-                style={{...St.ghost,borderColor:activeSpId===p.id?p.color:C.border,borderLeft:`1px solid ${activeSpId===p.id?p.color+"44":C.border}`,
-                  borderRadius:"0 6px 6px 0",color:C.dim,cursor:"pointer",
-                  fontSize:9,padding:"4px 5px",lineHeight:1.4}}>...</button>
-              {spaceMenu===p.id&&(
-                <div style={{position:"absolute",top:"calc(100% + 4px)",right:0,zIndex:400}} onClick={e=>e.stopPropagation()}>
-                  <SpaceCtxMenu port={p} clipboard={clipboard}
-                    onCopy={()=>{copySpace(p.id);setSpaceMenu(null);}}
-                    onPaste={()=>{pasteSpace();setSpaceMenu(null);}}
-                    onArchive={()=>{archiveSpace(p.id);setSpaceMenu(null);}}
-                    onDelete={()=>{deleteSpace(p.id);setSpaceMenu(null);}}
-                    onClose={()=>setSpaceMenu(null)}/>
-                </div>
-              )}
+              <div style={{position:"relative"}}>
+                <button onClick={e=>{e.stopPropagation();setSpaceMenu(spaceMenu===p.id?null:p.id);}}
+                  style={{...St.ghost,borderColor:activeSpId===p.id?p.color:C.border,borderLeft:`1px solid ${activeSpId===p.id?p.color+"44":C.border}`,
+                    borderRadius:"0 6px 6px 0",color:C.dim,cursor:"pointer",
+                    fontSize:9,padding:"4px 5px",lineHeight:1.4}}>...</button>
+                {spaceMenu===p.id&&(
+                  <div style={{position:"absolute",top:"calc(100% + 4px)",left:0,zIndex:400}} onClick={e=>e.stopPropagation()}>
+                    <SpaceCtxMenu port={p} clipboard={clipboard}
+                      onCopy={()=>{copySpace(p.id);setSpaceMenu(null);}}
+                      onPaste={()=>{pasteSpace();setSpaceMenu(null);}}
+                      onArchive={()=>{archiveSpace(p.id);setSpaceMenu(null);}}
+                      onDelete={()=>{deleteSpace(p.id);setSpaceMenu(null);}}
+                      onClose={()=>setSpaceMenu(null)}/>
+                  </div>
+                )}
+              </div>
             </div>
           ))}
           {/* Archived Spaces — shown as dimmed tabs with restore on click */}
@@ -2795,6 +2867,96 @@ function ArchiveTab({spaces, setSpaces}){
 /* ==========================================================
    ROOT APP
 ========================================================== */
+/* ==========================================================
+   THE VOID TAB  — graveyard for permanently deleted items
+========================================================== */
+function TheVoidTab({theVoid, setTheVoid, spaces, setSpaces}){
+  const [search, setSearch] = useState("");
+  const q = search.toLowerCase();
+  const TYPE_LABELS = {space:"Space",portfolio:"Portfolio",project:"Project",task:"Task",subtask:"Subtask"};
+  const filtered = theVoid.filter(i=> !q || i.name.toLowerCase().includes(q) || i.path.toLowerCase().includes(q));
+
+  const restore = item => {
+    // Re-insert at top level based on type — best effort
+    if(item.type==="space"){
+      setSpaces(s=>[...s, {...item.data, id:uid(), name:item.name+" (restored)"}]);
+    }
+    // For deeper types, we can only restore to void as we don't have the parent context reliably
+    // so we just remove from void and let user know
+    setTheVoid(v=>v.filter(x=>x.id!==item.id));
+  };
+
+  const purge = id => setTheVoid(v=>v.filter(x=>x.id!==id));
+  const purgeAll = () => setTheVoid([]);
+
+  return (
+    <div style={{maxWidth:860}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:18}}>
+        <div>
+          <div style={{fontSize:19,fontWeight:800,color:C.red,fontFamily:"'Syne',sans-serif"}}>The Void</div>
+          <div style={{fontSize:10,color:C.muted,fontFamily:"'JetBrains Mono',monospace",marginTop:2}}>
+            {theVoid.length} deleted item{theVoid.length!==1?"s":""} . permanently gone unless restored
+          </div>
+        </div>
+        <div style={{display:"flex",gap:8,alignItems:"center"}}>
+          <input value={search} onChange={e=>setSearch(e.target.value)}
+            placeholder="search..."
+            style={{...St.inp,width:160,padding:"5px 10px",fontSize:10}}/>
+          {theVoid.length>0&&(
+            <button onClick={purgeAll}
+              style={{...St.ghost,padding:"4px 10px",fontSize:9,color:C.red,borderColor:`${C.red}44`}}>
+              Purge All
+            </button>
+          )}
+        </div>
+      </div>
+
+      {filtered.length===0?(
+        <div style={{textAlign:"center",padding:"80px 0"}}>
+          <div style={{fontSize:32,marginBottom:12,opacity:0.2}}>x</div>
+          <div style={{color:C.dim,fontSize:11,fontFamily:"'JetBrains Mono',monospace"}}>
+            {theVoid.length===0?"the void is empty":"no matches"}
+          </div>
+        </div>
+      ):(
+        <div style={{display:"flex",flexDirection:"column",gap:4}}>
+          {filtered.map(item=>(
+            <div key={item.id}
+              style={{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",
+                background:C.card,border:`1px solid ${C.red}22`,borderRadius:8,
+                borderLeft:`3px solid ${C.red}66`}}>
+              <span style={{fontSize:8,color:C.red,fontFamily:"'JetBrains Mono',monospace",
+                background:`${C.red}18`,padding:"2px 6px",borderRadius:4,flexShrink:0,
+                textTransform:"uppercase",letterSpacing:"0.08em"}}>
+                {TYPE_LABELS[item.type]||item.type}
+              </span>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:11,fontWeight:700,color:C.muted,fontFamily:"'JetBrains Mono',monospace",
+                  overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                  {item.name}
+                </div>
+                <div style={{fontSize:9,color:C.dim,fontFamily:"'JetBrains Mono',monospace",marginTop:2}}>
+                  {item.path} · deleted {item.deletedAt}
+                </div>
+              </div>
+              {item.type==="space"&&(
+                <button onClick={()=>restore(item)}
+                  style={{...St.ghost,padding:"3px 10px",fontSize:9,color:C.cyan,borderColor:`${C.cyan}44`,flexShrink:0}}>
+                  ↺ restore
+                </button>
+              )}
+              <button onClick={()=>purge(item.id)}
+                style={{...St.ghost,padding:"3px 8px",fontSize:9,color:C.red,borderColor:`${C.red}44`,flexShrink:0}}>
+                purge
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 const NAV = [
   {id:"spaces",  icon:"*", label:"Spaces"},
   {id:"today",   icon:"o", label:"Focus"},
@@ -2802,6 +2964,7 @@ const NAV = [
   {id:"capacity",icon:"+", label:"Capacity"},
   {id:"calendar",icon:"@", label:"Calendar"},
   {id:"archive", icon:"v", label:"Archive"},
+  {id:"void",    icon:"x", label:"The Void"},
 ];
 
 export default function App(){
@@ -2812,8 +2975,38 @@ export default function App(){
   const [showDataMgr,setShowDataMgr] = useState(false);
   const [gistStatus,setGistStatus]   = useState("not configured");
   const [gistSyncing,setGistSyncing] = useState(false);
+  const [theVoid,setTheVoid]         = useState([]); // deleted items {id,type,name,path,deletedAt,data,restoreFn}
+  const [undoStack,setUndoStack]     = useState([]); // last 8 spaces snapshots
+  const [undoBanner,setUndoBanner]   = useState(null); // {msg, timeout}
   const saveTimer  = useRef(null);
   const gistTimer  = useRef(null);
+
+  const voidCount = theVoid.length;
+
+  // Push to undo stack (max 8)
+  const pushUndo = (msg, prevSpaces, voidItem) => {
+    setUndoStack(s=>[{msg, prevSpaces, voidItem, ts:Date.now()},...s].slice(0,8));
+    if(undoBanner?.timeout) clearTimeout(undoBanner.timeout);
+    const t = setTimeout(()=>setUndoBanner(null), 6000);
+    setUndoBanner({msg, timeout:t});
+  };
+
+  const doUndo = () => {
+    if(!undoStack.length) return;
+    const [top,...rest] = undoStack;
+    setSpaces(top.prevSpaces);
+    // remove from void if it was sent there
+    if(top.voidItem) setTheVoid(v=>v.filter(x=>x.id!==top.voidItem.id));
+    setUndoStack(rest);
+    setUndoBanner(null);
+  };
+
+  // Send deleted item to The Void
+  const sendToVoid = (type, name, path, data) => {
+    const item = {id:uid(), type, name, path, deletedAt:new Date().toLocaleString(), data};
+    setTheVoid(v=>[item,...v]);
+    return item;
+  };
 
   // Auto-save to localStorage + debounced Gist push
   useEffect(()=>{
@@ -2876,19 +3069,24 @@ export default function App(){
         {/* Logo */}
         <div style={{display:"flex",alignItems:"center",gap:8,marginRight:8}}>
           <div style={{width:26,height:26,borderRadius:6,background:`linear-gradient(135deg,${C.cyan},${C.blue})`,display:"flex",alignItems:"center",justifyContent:"center",boxShadow:`0 0 12px ${C.cyan}44`,fontSize:12,fontWeight:800,color:"#07090f"}}>*</div>
-          <span style={{fontSize:11,fontWeight:800,color:C.text,fontFamily:"'Syne',sans-serif",letterSpacing:"0.05em"}}>PRJ_MGMT</span>
-          <span style={{fontSize:8,color:C.muted,fontFamily:"'JetBrains Mono',monospace"}}>v7</span>
+          <div style={{display:"flex",flexDirection:"column",gap:0}}>
+            <span style={{fontSize:11,fontWeight:800,color:C.text,fontFamily:"'Syne',sans-serif",letterSpacing:"0.05em",lineHeight:1.1}}>PRJ_MGMT</span>
+            <span style={{fontSize:7,color:C.dim,fontFamily:"'JetBrains Mono',monospace",lineHeight:1.1}}>v7.1.0</span>
+          </div>
         </div>
 
         {/* Nav */}
         {NAV.map(n=>(
           <button key={n.id} onClick={()=>setTab(n.id)}
             style={{background:tab===n.id?`${C.cyan}18`:"none",border:"none",cursor:"pointer",padding:"4px 10px",borderRadius:6,
-              color:tab===n.id?C.cyan:C.muted,fontSize:10,fontWeight:700,
+              color:n.id==="void"?(tab===n.id?C.red:C.muted):(tab===n.id?C.cyan:C.muted),fontSize:10,fontWeight:700,
               fontFamily:"'JetBrains Mono',monospace",display:"flex",alignItems:"center",gap:5,position:"relative"}}>
-            <span>{n.icon}</span><span>{n.label}</span>
+            <span>{n.icon}</span><span className="nav-label">{n.label}</span>
             {n.id==="today"&&focusBadge>0&&(
               <span style={{background:C.red,color:"#fff",borderRadius:99,fontSize:8,padding:"0 4px",fontWeight:800,minWidth:16,textAlign:"center",position:"absolute",top:-4,right:-4}}>{focusBadge}</span>
+            )}
+            {n.id==="void"&&voidCount>0&&(
+              <span style={{background:C.red+"44",color:C.red,borderRadius:99,fontSize:8,padding:"0 4px",fontWeight:800,minWidth:16,textAlign:"center",position:"absolute",top:-4,right:-4}}>{voidCount}</span>
             )}
           </button>
         ))}
@@ -2899,6 +3097,7 @@ export default function App(){
         <div style={{position:"relative"}}>
           <span style={{position:"absolute",left:8,top:"50%",transform:"translateY(-50%)",color:C.dim,fontSize:11}}>S</span>
           <input value={searchQ} onChange={e=>setSearchQ(e.target.value)} placeholder="Search..."
+            className="search-bar"
             style={{...St.inp,width:160,paddingLeft:24,fontSize:10,background:C.card2}}/>
           {searchQ&&<button onClick={()=>setSearchQ("")} style={{position:"absolute",right:6,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",color:C.dim,cursor:"pointer",fontSize:12}}>x</button>}
         </div>
@@ -2915,11 +3114,11 @@ export default function App(){
 
         {/* Data Manager */}
         <button onClick={()=>setShowDataMgr(true)} style={{...St.ghost,padding:"4px 10px",fontSize:9,color:C.cyan,borderColor:`${C.cyan}44`,display:"flex",alignItems:"center",gap:5}}>
-          <span>o</span> Data
+          <span>o</span> <span className="nav-label">Data</span>
         </button>
 
         {/* Stats */}
-        <div style={{display:"flex",gap:12,borderLeft:`1px solid ${C.border}`,paddingLeft:12}}>
+        <div className="stats-bar" style={{display:"flex",gap:12,borderLeft:`1px solid ${C.border}`,paddingLeft:12}}>
           {[[stats.projs,"PROJ"],[`${stats.avgProg}%`,"PROG"],[`${stats.totalAssigned.toFixed(0)}h`,"ASGN"],[`${stats.totalActual.toFixed(0)}h`,"ACTL"]].map(([v,l])=>(
             <div key={l} style={{textAlign:"center"}}>
               <div style={{fontSize:13,fontWeight:800,color:l==="ACTL"?C.green:C.cyan,fontFamily:"'JetBrains Mono',monospace"}}>{v}</div>
@@ -2929,14 +3128,26 @@ export default function App(){
         </div>
       </div>
 
+      {/* Undo banner */}
+      {undoBanner&&(
+        <div className="fu" style={{position:"fixed",bottom:24,left:"50%",transform:"translateX(-50%)",
+          background:C.card,border:`1px solid ${C.cyan}66`,borderRadius:10,padding:"10px 18px",
+          display:"flex",alignItems:"center",gap:14,zIndex:500,boxShadow:"0 8px 32px rgba(0,0,0,0.7)"}}>
+          <span style={{fontSize:10,color:C.text,fontFamily:"'JetBrains Mono',monospace"}}>{undoBanner.msg}</span>
+          <button onClick={doUndo} style={{...St.btn,padding:"4px 12px",fontSize:10,background:C.cyan}}>↺ Undo</button>
+          <button onClick={()=>{clearTimeout(undoBanner.timeout);setUndoBanner(null);}} style={{background:"none",border:"none",color:C.dim,cursor:"pointer",fontSize:14}}>x</button>
+        </div>
+      )}
+
       {/* Main content */}
-      <div style={{padding:20,maxWidth:1600,margin:"0 auto"}}>
-        {tab==="spaces"   &&<SpacesTab   spaces={spaces} setSpaces={setSpaces} searchQ={searchQ}/>}
+      <div className="main-pad" style={{padding:20,maxWidth:1600,margin:"0 auto"}}>
+        {tab==="spaces"   &&<SpacesTab   spaces={spaces} setSpaces={setSpaces} searchQ={searchQ} pushUndo={pushUndo} sendToVoid={sendToVoid}/>}
         {tab==="today"    &&<TodayFocus  spaces={spaces}/>}
         {tab==="gantt"    &&<GanttTab    spaces={spaces}/>}
         {tab==="capacity" &&<CapacityTab spaces={spaces}/>}
         {tab==="calendar" &&<CalendarTab spaces={spaces}/>}
         {tab==="archive"  &&<ArchiveTab  spaces={spaces} setSpaces={setSpaces}/>}
+        {tab==="void"     &&<TheVoidTab  theVoid={theVoid} setTheVoid={setTheVoid} spaces={spaces} setSpaces={setSpaces}/>}
       </div>
     </div>
   );
