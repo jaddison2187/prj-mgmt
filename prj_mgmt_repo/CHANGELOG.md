@@ -2,6 +2,28 @@
 
 ---
 
+## v7.5.1 — Patch · 2026-03-05
+
+### Fixed
+- **Critical crash on load.** SpacesTab state sync to App() was calling parent `setState` functions inside child `setState` updater callbacks — a React violation that crashes in StrictMode (Vite dev builds). Replaced the illegal nested-setter wrappers with four `useEffect` hooks that sync `activeSpId`, `activePortId`, `activeProjId`, and `collapsedSp` up to App after each render. Functionally identical, now React-compliant.
+
+---
+
+## v7.5.0 — Minor · 2026-03-05
+
+### Added
+- **PIN lock screen.** Every new browser session opens an auth screen. First visit prompts "Set a PIN" (4–8 digits); subsequent visits in the same tab session are auto-unlocked via `sessionStorage`. PIN is stored as a SHA-256 hex hash — never readable plaintext. A 🔒 Lock button in the top bar lets you re-lock manually at any time.
+- **Capacity — actual effort bars.** Grid cells now render a dual bar: blue fill = assigned daily load, green overlay = actual daily load (derived from `actualHrs` spread evenly across the date range). Actual hours also shown as a small `{x}a` label below assigned.
+- **Capacity — totals row.** Now shows `TOTAL ASGN` / `TOTAL ACTL` labels, plus a green actual sub-line under each day column.
+- **Capacity — period summary cards.** Now breaks out three values: `SCHED` (distributed scheduled hours), `ASGN` (raw assigned hours in period), and `ACTL` (raw actual hours in period). A second green bar shows actual-vs-assigned ratio.
+- **Calendar — empty day click.** Clicking any empty date cell opens the day popover with a "Nothing scheduled" state and a one-click `+ Add event for this day` button that pre-fills the date and opens the Add Event form.
+
+### Fixed
+- **Capacity hour distribution off-by-one.** Tasks spanning N days had their hours spread over N−1 days because `diffD(start, end)` counts days *between* dates. Fixed by using `diffD(start, end) + 1` as the divisor. Same fix applied to subtasks.
+- **SpacesTab state lost on tab switch.** Active space, portfolio, project, and collapsed section state reset every time you left the Spaces tab. The component is now always-mounted with CSS `display` toggling instead of React unmount/remount.
+
+---
+
 ## v7.4.1 — Patch · 2026-02-23
 
 ### Fixed
