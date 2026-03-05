@@ -1,4 +1,4 @@
-// v7.4.1
+// v7.5.1
 import React, { useState, useMemo, useRef, useCallback, useEffect } from "react";
 
 /* ==========================================================
@@ -1699,19 +1699,28 @@ function ProjCtxMenu({pr,sp,onCopy,onFlag,onArchive,onDelete,onClose}){
   return <CtxMenu onClose={onClose} items={items}/>;
 }
 
-function SpacesTab({spaces,setSpaces,searchQ,pushUndo,sendToVoid,navSpId,navPortId,navProjId,navTaskId,onNavConsumed}){
-  const [activeSpId,    setActiveSpId]    = useState(spaces[0]?.id);
-  const [activePortId,  setActivePortId]  = useState(null);
-  const [activeProjId,  setActiveProjId]  = useState(null);
+function SpacesTab({spaces,setSpaces,searchQ,pushUndo,sendToVoid,navSpId,navPortId,navProjId,navTaskId,onNavConsumed,
+    persistActiveSpId,onActiveSpId,persistActivePortId,onActivePortId,persistActiveProjId,onActiveProjId,
+    persistCollapsedSp,onCollapsedSp}){
+  const [activeSpId,    setActiveSpId]    = useState(persistActiveSpId??spaces[0]?.id);
+  const [activePortId,  setActivePortId]  = useState(persistActivePortId??null);
+  const [activeProjId,  setActiveProjId]  = useState(persistActiveProjId??null);
   const [activeTaskId,  setActiveTaskId]  = useState(null); // task to scroll-to after nav
   const [confirm,      setConfirm]      = useState(null);
-  const [collapsedSp,  setCollapsedSp]  = useState({});
+  const [collapsedSp,  setCollapsedSp]  = useState(persistCollapsedSp??{});
   const [spaceMenu,    setSpaceMenu]    = useState(null);
   const [portMenu,     setPortMenu]     = useState(null);
   const [prMenu,       setPrMenu]       = useState(null);
   const [clipboard,    setClipboard]    = useState(null); // {type:"project"|"task"|"subtask", item}
   const spaceDragIdx = useRef(null);
   const projDragIdx  = useRef(null);
+
+  // Sync state back to App after each render so tab switches preserve it
+  useEffect(()=>{ onActiveSpId?.(activeSpId); },   [activeSpId]);
+  useEffect(()=>{ onActivePortId?.(activePortId); },[activePortId]);
+  useEffect(()=>{ onActiveProjId?.(activeProjId); },[activeProjId]);
+  useEffect(()=>{ onCollapsedSp?.(collapsedSp); },  [collapsedSp]);
+
   const toggleSpace  = sid => setCollapsedSp(s=>({...s,[sid]:!s[sid]}));
 
   // Consume incoming navigation from TodayFocus
@@ -2837,13 +2846,13 @@ function CapacityTab({spaces,viewMode,setViewMode,rangeW,setRangeW,weekOff,setWe
           const projRow={id:pr.id,label:pr.name,sublabel:`${sp.name}`,color:pr.color,portfolioId:sp.id,portfolioName:sp.name,isProject:true,tasks:[]};
           activeTasks.forEach(t=>{
             const th=taskAssigned(t); const ta=taskActual(t);
-            const dailyH=th/Math.max(1,diffD(t.start,t.end));
+            const dailyH=th/Math.max(1,diffD(t.start,t.end)+1);
             const taskRow={id:t.id,label:t.name,color:pr.color,hpd:dailyH,assignedHrs:th,actualHrs:ta,isTask:true,subtasks:[],start:t.start,end:t.end,progress:taskProg(t),status:t.status};
             const activeSubs=(t.subtasks||[]).filter(s=>!s.archived);
             if(activeSubs.length){
               activeSubs.forEach(st=>{
                 const sh=stAssigned(st); const sa=stActual(st);
-                const dailySh=sh/Math.max(1,diffD(st.start,st.end));
+                const dailySh=sh/Math.max(1,diffD(st.start,st.end)+1);
                 taskRow.subtasks.push({id:st.id,label:st.name,color:pr.color,hpd:dailySh,assignedHrs:sh,actualHrs:sa,start:st.start,end:st.end,progress:st.progress,status:st.status});
               });
             }
@@ -2861,11 +2870,26 @@ function CapacityTab({spaces,viewMode,setViewMode,rangeW,setRangeW,weekOff,setWe
     if(ds<item.start||ds>item.end) return 0;
     return item.hpd||0;
   };
+  // Spread actual hours evenly across the item's date range (same logic as assigned)
+  const getDayActualLoad=(item,d)=>{
+    const ds=fmtD(d);
+    if(ds<item.start||ds>item.end) return 0;
+    const days=Math.max(1,diffD(item.start,item.end)+1);
+    return (item.actualHrs||0)/days;
+  };
   const getDayTotal=d=>{
     let tot=0;
     capRows.forEach(pr=>pr.tasks.forEach(t=>{
       if(t.subtasks.length) t.subtasks.forEach(st=>{tot+=getDayLoad(st,d);});
       else tot+=getDayLoad(t,d);
+    }));
+    return tot;
+  };
+  const getDayActualTotal=d=>{
+    let tot=0;
+    capRows.forEach(pr=>pr.tasks.forEach(t=>{
+      if(t.subtasks.length) t.subtasks.forEach(st=>{tot+=getDayActualLoad(st,d);});
+      else tot+=getDayActualLoad(t,d);
     }));
     return tot;
   };
@@ -3015,17 +3039,52 @@ function CapacityTab({spaces,viewMode,setViewMode,rangeW,setRangeW,weekOff,setWe
           <div style={{display:"grid",gridTemplateColumns:`repeat(${numCols},1fr)`,gap:12,marginBottom:16}}>
             {Array.from({length:numCols},(_,wi)=>{
               const wD=displayDates.slice(wi*chunkSize,(wi+1)*chunkSize);
-              const tot=wD.reduce((s,d)=>s+getDayTotal(d),0);
-              const pct=Math.round(tot/(CAP*Math.max(1,wD.length))*100);
+              const sched=wD.reduce((s,d)=>s+getDayTotal(d),0);
+              const asgn=capRows.reduce((s,pr)=>s+pr.tasks.reduce((ts,t)=>{
+                // sum assignedHrs for items overlapping this week window
+                const wStart=fmtD(wD[0]); const wEnd=fmtD(wD[wD.length-1]);
+                if(t.subtasks.length) return ts+t.subtasks.reduce((ss,st)=>{
+                  if(st.end<wStart||st.start>wEnd) return ss;
+                  const days=Math.max(1,diffD(st.start,st.end)+1);
+                  const overlap=wD.filter(d=>{const ds=fmtD(d);return ds>=st.start&&ds<=st.end;}).length;
+                  return ss+(st.assignedHrs||0)*(overlap/days);
+                },0);
+                if(t.end<wStart||t.start>wEnd) return ts;
+                const days=Math.max(1,diffD(t.start,t.end)+1);
+                const overlap=wD.filter(d=>{const ds=fmtD(d);return ds>=t.start&&ds<=t.end;}).length;
+                return ts+(t.assignedHrs||0)*(overlap/days);
+              },0),0);
+              const actl=capRows.reduce((s,pr)=>s+pr.tasks.reduce((ts,t)=>{
+                const wStart=fmtD(wD[0]); const wEnd=fmtD(wD[wD.length-1]);
+                if(t.subtasks.length) return ts+t.subtasks.reduce((ss,st)=>{
+                  if(st.end<wStart||st.start>wEnd) return ss;
+                  const days=Math.max(1,diffD(st.start,st.end)+1);
+                  const overlap=wD.filter(d=>{const ds=fmtD(d);return ds>=st.start&&ds<=st.end;}).length;
+                  return ss+(st.actualHrs||0)*(overlap/days);
+                },0);
+                if(t.end<wStart||t.start>wEnd) return ts;
+                const days=Math.max(1,diffD(t.start,t.end)+1);
+                const overlap=wD.filter(d=>{const ds=fmtD(d);return ds>=t.start&&ds<=t.end;}).length;
+                return ts+(t.actualHrs||0)*(overlap/days);
+              },0),0);
+              const pct=Math.round(sched/(CAP*Math.max(1,wD.length))*100);
               const label=viewMode==="week"?`Week ${wi+1+weekOff}`:viewMode==="month"?monthLabel:"Custom Range";
               return (
                 <div key={wi} style={{background:C.card,border:`1px solid ${C.cyan}33`,borderRadius:10,padding:"11px 14px"}}>
                   <div style={St.lbl}>{label}</div>
-                  <div style={{display:"flex",justifyContent:"space-between",margin:"5px 0"}}>
-                    <span style={{fontSize:20,fontWeight:800,color:C.cyan,fontFamily:"'JetBrains Mono',monospace"}}>{tot.toFixed(1)}h</span>
-                    <span style={{fontSize:13,fontWeight:700,fontFamily:"'JetBrains Mono',monospace",color:pct>90?C.red:pct>70?C.orange:C.green}}>{pct}%</span>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-end",margin:"6px 0 4px"}}>
+                    <div>
+                      <div style={{fontSize:18,fontWeight:800,color:C.cyan,fontFamily:"'JetBrains Mono',monospace",lineHeight:1}}>{sched.toFixed(1)}h</div>
+                      <div style={{fontSize:7,color:C.dim,fontFamily:"'JetBrains Mono',monospace",marginTop:1}}>SCHED (distributed)</div>
+                    </div>
+                    <div style={{textAlign:"right"}}>
+                      <div style={{fontSize:11,fontWeight:700,color:C.blue,fontFamily:"'JetBrains Mono',monospace"}}>{asgn.toFixed(1)}h <span style={{fontSize:7,color:C.dim}}>ASGN</span></div>
+                      <div style={{fontSize:11,fontWeight:700,color:C.green,fontFamily:"'JetBrains Mono',monospace"}}>{actl.toFixed(1)}h <span style={{fontSize:7,color:C.dim}}>ACTL</span></div>
+                    </div>
+                    <span style={{fontSize:13,fontWeight:700,fontFamily:"'JetBrains Mono',monospace",color:pct>90?C.red:pct>70?C.orange:C.muted}}>{pct}%</span>
                   </div>
                   <Bar v={pct} c={pct>90?C.red:pct>70?C.orange:C.cyan} h={4}/>
+                  {actl>0&&<Bar v={Math.round(actl/Math.max(0.01,asgn)*100)} c={C.green} h={3}/>}
                 </div>
               );
             })}
@@ -3063,15 +3122,20 @@ function CapacityTab({spaces,viewMode,setViewMode,rangeW,setRangeW,weekOff,setWe
                   </div>
                 </div>
                 {weekDates.map((d,i)=>{
-                  let tot=0;
-                  pr.tasks.forEach(t=>{if(t.subtasks.length)t.subtasks.forEach(st=>{tot+=getDayLoad(st,d);});else tot+=getDayLoad(t,d);});
+                  let tot=0, totA=0;
+                  pr.tasks.forEach(t=>{
+                    if(t.subtasks.length){t.subtasks.forEach(st=>{tot+=getDayLoad(st,d);totA+=getDayActualLoad(st,d);});}
+                    else{tot+=getDayLoad(t,d);totA+=getDayActualLoad(t,d);}
+                  });
                   return (
                     <div key={i} onClick={e=>{e.stopPropagation();setDayDetail(fmtD(d));}} style={{padding:"4px 2px",borderLeft:`1px solid ${C.border}11`,display:"flex",flexDirection:"column",alignItems:"center",gap:1,cursor:"pointer"}}>
                       {tot>0&&<>
-                        <div style={{width:"80%",height:22,background:`${pr.color}22`,borderRadius:3,overflow:"hidden",position:"relative"}}>
-                          <div style={{position:"absolute",bottom:0,left:0,right:0,background:pr.color,opacity:0.75,height:`${Math.min(100,tot/CAP*100)}%`}}/>
+                        <div style={{width:"80%",height:22,background:`${pr.color}15`,borderRadius:3,overflow:"hidden",position:"relative"}}>
+                          <div style={{position:"absolute",bottom:0,left:0,right:0,background:pr.color,opacity:0.7,height:`${Math.min(100,tot/CAP*100)}%`}}/>
+                          {totA>0&&<div style={{position:"absolute",bottom:0,left:0,width:`${Math.min(100,totA/tot*100)}%`,background:C.green,opacity:0.6,height:"100%"}}/>}
                         </div>
                         <span style={{fontSize:8,fontFamily:"'JetBrains Mono',monospace",color:pr.color}}>{tot.toFixed(1)}h</span>
+                        {totA>0&&<span style={{fontSize:7,fontFamily:"'JetBrains Mono',monospace",color:C.green}}>{totA.toFixed(1)}a</span>}
                       </>}
                       {!tot&&<span style={{fontSize:8,color:C.dim}}>-</span>}
                     </div>
@@ -3130,13 +3194,17 @@ function CapacityTab({spaces,viewMode,setViewMode,rangeW,setRangeW,weekOff,setWe
 
           {/* Totals row */}
           <div style={{display:"grid",gridTemplateColumns:`220px repeat(${displayDates.length},minmax(48px,1fr))`,background:C.panel,borderTop:`1px solid ${C.border}`}}>
-            <div style={{padding:"7px 12px",fontSize:9,fontFamily:"'JetBrains Mono',monospace",color:C.muted,fontWeight:700}}>TOTAL / REMAINING</div>
+            <div style={{padding:"7px 12px",fontSize:9,fontFamily:"'JetBrains Mono',monospace",color:C.muted,fontWeight:700}}>
+              <div>TOTAL ASGN</div>
+              <div style={{fontSize:8,color:C.green,marginTop:2}}>TOTAL ACTL</div>
+            </div>
             {weekDates.map((d,i)=>{
-              const tot=getDayTotal(d); const over=tot>CAP;
+              const tot=getDayTotal(d); const totA=getDayActualTotal(d); const over=tot>CAP;
               return (
                 <div key={i} onClick={()=>setDayDetail(fmtD(d))} style={{padding:"4px 3px",borderLeft:`1px solid ${C.border}`,textAlign:"center",cursor:"pointer"}}>
-                  <div style={{fontSize:12,fontWeight:700,fontFamily:"'JetBrains Mono',monospace",color:over?C.red:tot>6?C.orange:C.green}}>{tot.toFixed(1)}</div>
+                  <div style={{fontSize:12,fontWeight:700,fontFamily:"'JetBrains Mono',monospace",color:over?C.red:tot>6?C.orange:C.cyan}}>{tot.toFixed(1)}</div>
                   <div style={{fontSize:8,fontFamily:"'JetBrains Mono',monospace",color:over?C.red:C.dim}}>{over?`+${(tot-CAP).toFixed(1)}!`:`${(CAP-tot).toFixed(1)}r`}</div>
+                  {totA>0&&<div style={{fontSize:8,fontFamily:"'JetBrains Mono',monospace",color:C.green,marginTop:1}}>{totA.toFixed(1)}a</div>}
                 </div>
               );
             })}
@@ -3317,7 +3385,15 @@ function CalendarTab({spaces,filterSpaceId,setFilterSpaceId,filterPortfolioId,se
               )}
 
               {/* Event list */}
-              {!dayEvs.length&&<div style={{color:C.muted,fontSize:11,fontFamily:"'JetBrains Mono',monospace",textAlign:"center",padding:"16px 0"}}>Nothing scheduled.</div>}
+              {!dayEvs.length&&(
+                <div style={{textAlign:"center",padding:"20px 0"}}>
+                  <div style={{color:C.muted,fontSize:11,fontFamily:"'JetBrains Mono',monospace",marginBottom:12}}>Nothing scheduled.</div>
+                  <button onClick={()=>{ setSelectedDay(null); setNewEv(p=>({...p,date:ds})); setShowAdd(true); }}
+                    style={{...St.btn,fontSize:10,padding:"7px 16px",background:`${C.cyan}22`,color:C.cyan,border:`1px solid ${C.cyan}44`}}>
+                    + Add event for this day
+                  </button>
+                </div>
+              )}
               {dayEvs.map(ev=>(
                 <div key={ev.id}
                   style={{background:C.card2,border:`1px solid ${ev.projColor||typeC[ev.type]||C.border}44`,borderRadius:8,marginBottom:8,overflow:"hidden"}}>
@@ -3791,6 +3867,172 @@ function usePermissions(userId){
   };
 }
 
+/* ==========================================================
+   CHANGELOG
+   v7.5.1 (2026-03-05) — Patch
+   FIXED:
+   - Critical crash fix: SpacesTab state sync to App() was calling a parent
+     setState inside a child setState updater function, which React prohibits
+     (causes a crash in StrictMode / Vite dev builds). Replaced the illegal
+     nested-setter wrappers with four useEffect hooks that sync activeSpId,
+     activePortId, activeProjId, and collapsedSp to App after each render.
+     Functionally identical behavior, now React-compliant.
+
+   v7.5.0 (2026-03-05) — Minor
+   ADDED:
+   - Auth / sign-in screen: PIN-based lock screen shown on every new browser
+     session. First visit prompts "Set a PIN" (4–8 digits). Subsequent visits
+     in the same browser session are auto-unlocked (sessionStorage flag).
+     PIN is stored as a plain SHA-256 hex hash in localStorage so it never
+     sits in plaintext. A "Lock" button in the top-bar lets the user re-lock
+     at any time.
+   - Capacity: actual effort bars — every grid cell now renders a dual-bar:
+     blue (assigned daily load) + green (actual daily load, derived from
+     actualHrs spread across the date range). The totals row gains a second
+     sub-row showing "ACTLxxx h" per day.
+   - Capacity: period summary card now shows three values:
+       SCHED (distributed scheduled hours for the period)
+       ASGN  (raw task assignedHrs that fall in the period)
+       ACTL  (raw task actualHrs that fall in the period)
+   - Calendar: empty-day click now reliably opens the day popover on ALL
+     valid date cells, even those with no events. The popover shows a clear
+     "Nothing scheduled" state plus a one-click "+ Add event for this day"
+     button that pre-fills the date in the Add Event form.
+   FIXED:
+   - Capacity hour distribution was off by one: tasks spanning N days had
+     their hours spread over N-1 days due to diffD(start,end) not counting
+     the start day itself. Fixed by using diffD(start,end)+1 as the divisor.
+   - SpacesTab state (selected space, portfolio, project, collapsed sections,
+     clipboard) is now preserved across tab switches. Previously the component
+     unmounted and reset every time you left the Spaces tab. Now it stays
+     mounted with CSS visibility toggling.
+========================================================== */
+
+/* ==========================================================
+   AUTH SCREEN  — session-based PIN lock
+========================================================== */
+const AUTH_KEY     = "prj_mgmt_pin_v1";   // localStorage: stores hex hash of PIN
+const SESSION_KEY  = "prj_auth_session";   // sessionStorage: "1" if unlocked this session
+
+async function hashPin(pin){
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(pin));
+  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,"0")).join("");
+}
+
+function AuthScreen({onUnlock}){
+  const hasPin = !!localStorage.getItem(AUTH_KEY);
+  const [mode,  setMode]  = useState(hasPin ? "unlock" : "setup"); // "setup"|"unlock"|"change"
+  const [pin,   setPin]   = useState("");
+  const [pin2,  setPin2]  = useState("");  // confirm field for setup
+  const [err,   setErr]   = useState("");
+  const [busy,  setBusy]  = useState(false);
+  const inputRef = useRef(null);
+  useEffect(()=>{ setTimeout(()=>inputRef.current?.focus(),80); },[mode]);
+
+  const handleSetup = async () => {
+    if(pin.length < 4){ setErr("PIN must be at least 4 digits."); return; }
+    if(pin !== pin2){ setErr("PINs do not match."); return; }
+    setBusy(true);
+    const h = await hashPin(pin);
+    localStorage.setItem(AUTH_KEY, h);
+    sessionStorage.setItem(SESSION_KEY, "1");
+    setBusy(false);
+    onUnlock();
+  };
+
+  const handleUnlock = async () => {
+    setBusy(true);
+    const h = await hashPin(pin);
+    setBusy(false);
+    if(h === localStorage.getItem(AUTH_KEY)){
+      sessionStorage.setItem(SESSION_KEY, "1");
+      setErr(""); onUnlock();
+    } else {
+      setErr("Incorrect PIN. Try again.");
+      setPin("");
+      inputRef.current?.focus();
+    }
+  };
+
+  const handleKey = e => { if(e.key==="Enter") mode==="setup" ? handleSetup() : handleUnlock(); };
+
+  return (
+    <div style={{minHeight:"100vh",background:C.bg,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'JetBrains Mono',monospace"}}>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=JetBrains+Mono:wght@400;700&display=swap');
+        *{box-sizing:border-box;margin:0;padding:0}
+        body{background:#07090f}
+        input:focus{outline:none}
+        @keyframes fu{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+      `}</style>
+      <div className="fu" style={{background:C.card,border:`1px solid ${C.cyan}44`,borderRadius:20,padding:"36px 40px",width:340,boxShadow:`0 0 60px ${C.cyan}18`}}>
+        {/* Logo */}
+        <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:28}}>
+          <div style={{width:34,height:34,borderRadius:9,background:`linear-gradient(135deg,${C.cyan},${C.blue})`,
+            display:"flex",alignItems:"center",justifyContent:"center",
+            boxShadow:`0 0 18px ${C.cyan}55`,fontSize:18,fontWeight:800,color:"#07090f"}}>*</div>
+          <div>
+            <div style={{fontSize:14,fontWeight:800,color:C.text,fontFamily:"'Syne',sans-serif",letterSpacing:"0.06em"}}>PRJ_MGMT</div>
+            <div style={{fontSize:8,color:C.dim}}>v7.5.1 · session locked</div>
+          </div>
+        </div>
+
+        <div style={{fontSize:13,fontWeight:700,color:C.text,fontFamily:"'Syne',sans-serif",marginBottom:6}}>
+          {mode==="setup" ? "Set a PIN to protect your workspace" : "Enter your PIN to unlock"}
+        </div>
+        <div style={{fontSize:10,color:C.muted,marginBottom:20,lineHeight:1.6}}>
+          {mode==="setup" ? "4–8 digits. Stored as a hash — never readable." : "Your session will stay unlocked until you close this tab or click Lock."}
+        </div>
+
+        {/* PIN input */}
+        <div style={{marginBottom:mode==="setup"?12:16}}>
+          <div style={{fontSize:8,color:C.dim,letterSpacing:"0.15em",marginBottom:5,textTransform:"uppercase"}}>PIN</div>
+          <input ref={inputRef} type="password" inputMode="numeric" maxLength={8}
+            value={pin} onChange={e=>{ setPin(e.target.value.replace(/\D/g,"")); setErr(""); }}
+            onKeyDown={handleKey}
+            placeholder="• • • •"
+            style={{background:C.card2,border:`1px solid ${err?C.red:C.border}`,borderRadius:8,color:C.text,
+              padding:"10px 14px",fontSize:18,width:"100%",letterSpacing:"0.4em",
+              fontFamily:"'JetBrains Mono',monospace",textAlign:"center"}}/>
+        </div>
+
+        {mode==="setup"&&(
+          <div style={{marginBottom:16}}>
+            <div style={{fontSize:8,color:C.dim,letterSpacing:"0.15em",marginBottom:5,textTransform:"uppercase"}}>Confirm PIN</div>
+            <input type="password" inputMode="numeric" maxLength={8}
+              value={pin2} onChange={e=>{ setPin2(e.target.value.replace(/\D/g,"")); setErr(""); }}
+              onKeyDown={handleKey}
+              placeholder="• • • •"
+              style={{background:C.card2,border:`1px solid ${err?C.red:C.border}`,borderRadius:8,color:C.text,
+                padding:"10px 14px",fontSize:18,width:"100%",letterSpacing:"0.4em",
+                fontFamily:"'JetBrains Mono',monospace",textAlign:"center"}}/>
+          </div>
+        )}
+
+        {err&&<div style={{fontSize:10,color:C.red,marginBottom:12,textAlign:"center"}}>{err}</div>}
+
+        <button onClick={mode==="setup"?handleSetup:handleUnlock} disabled={busy||!pin}
+          style={{background:C.cyan,color:"#07090f",border:"none",borderRadius:8,
+            padding:"11px",fontSize:12,fontWeight:800,cursor:busy||!pin?"not-allowed":"pointer",
+            width:"100%",fontFamily:"'JetBrains Mono',monospace",
+            opacity:busy||!pin?0.5:1}}>
+          {busy?"..." : mode==="setup" ? "Set PIN & Unlock" : "Unlock"}
+        </button>
+
+        {mode==="unlock"&&(
+          <div style={{marginTop:12,textAlign:"center"}}>
+            <button onClick={()=>{ localStorage.removeItem(AUTH_KEY); setMode("setup"); setPin(""); setPin2(""); setErr(""); }}
+              style={{background:"none",border:"none",color:C.dim,cursor:"pointer",fontSize:9,
+                fontFamily:"'JetBrains Mono',monospace",textDecoration:"underline"}}>
+              Forgot PIN? Reset (clears PIN only, data preserved)
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 const NAV = [
   {id:"spaces",  icon:"*", label:"Spaces"},
   {id:"today",   icon:"o", label:"Focus"},
@@ -3802,6 +4044,10 @@ const NAV = [
 ];
 
 export default function App(){
+  // ── AUTH ── session-based PIN lock ──────────────────────────────────────
+  const [unlocked,setUnlocked] = useState(()=>!!sessionStorage.getItem(SESSION_KEY));
+  const lock = useCallback(()=>{ sessionStorage.removeItem(SESSION_KEY); setUnlocked(false); },[]);
+
   const [tab,setTab]                 = useState("spaces");
   const [spaces,setSpaces]           = useState(()=>loadLS()||INIT);
   const [searchQ,setSearchQ]         = useState("");
@@ -3822,6 +4068,12 @@ export default function App(){
     setNavSpId(spId); setNavPortId(portId); setNavProjId(projId); setNavTaskId(taskId);
     setTab("spaces");
   },[]);
+
+  // ── SPACESTAB PERSISTENT STATE ── lifted here so tab switches never reset it ──
+  const [spActiveSpId,   setSpActiveSpId]   = useState(()=>spaces[0]?.id);
+  const [spActivePortId, setSpActivePortId] = useState(null);
+  const [spActiveProjId, setSpActiveProjId] = useState(null);
+  const [spCollapsedSp,  setSpCollapsedSp]  = useState({});
 
   // ── PERSISTENT FILTER STATE ── lifted here so switching tabs never resets them ──
 
@@ -3948,6 +4200,8 @@ export default function App(){
 
   return (
     <div style={{minHeight:"100vh",background:C.bg,fontFamily:"'JetBrains Mono',monospace"}}>
+      {!unlocked&&<AuthScreen onUnlock={()=>setUnlocked(true)}/>}
+      {unlocked&&<>
       <style>{CSS}</style>
       {showDataMgr&&<DataManager spaces={spaces} setSpaces={setSpaces} onClose={()=>setShowDataMgr(false)} gistStatus={gistStatus}/>}
       {/* Top bar */}
@@ -3957,7 +4211,7 @@ export default function App(){
           <div style={{width:26,height:26,borderRadius:6,background:`linear-gradient(135deg,${C.cyan},${C.blue})`,display:"flex",alignItems:"center",justifyContent:"center",boxShadow:`0 0 12px ${C.cyan}44`,fontSize:12,fontWeight:800,color:"#07090f"}}>*</div>
           <div style={{display:"flex",flexDirection:"column",gap:0}}>
             <span style={{fontSize:11,fontWeight:800,color:C.text,fontFamily:"'Syne',sans-serif",letterSpacing:"0.05em",lineHeight:1.1}}>PRJ_MGMT</span>
-            <span style={{fontSize:7,color:C.dim,fontFamily:"'JetBrains Mono',monospace",lineHeight:1.1}}>v7.4.1</span>
+            <span style={{fontSize:7,color:C.dim,fontFamily:"'JetBrains Mono',monospace",lineHeight:1.1}}>v7.5.1</span>
           </div>
         </div>
 
@@ -4003,6 +4257,12 @@ export default function App(){
           <span>o</span> <span className="nav-label">Data</span>
         </button>
 
+        {/* Lock button */}
+        <button onClick={lock} title="Lock workspace"
+          style={{...St.ghost,padding:"4px 9px",fontSize:9,color:C.muted,borderColor:`${C.border}`,display:"flex",alignItems:"center",gap:4}}>
+          <span>🔒</span><span className="nav-label">Lock</span>
+        </button>
+
         {/* Stats */}
         <div className="stats-bar" style={{display:"flex",gap:12,borderLeft:`1px solid ${C.border}`,paddingLeft:12}}>
           {[[stats.projs,"PROJ"],[`${stats.avgProg}%`,"PROG"],[`${stats.totalAssigned.toFixed(0)}h`,"ASGN"],[`${stats.totalActual.toFixed(0)}h`,"ACTL"]].map(([v,l])=>(
@@ -4027,9 +4287,16 @@ export default function App(){
 
       {/* Main content */}
       <div className="main-pad" style={{padding:20,maxWidth:1600,margin:"0 auto"}}>
-        {tab==="spaces"   &&<SpacesTab   spaces={spaces} setSpaces={setSpaces} searchQ={searchQ} pushUndo={pushUndo} sendToVoid={sendToVoid}
+        {/* SpacesTab is always mounted (never unmounts) — display toggled by CSS to preserve state */}
+        <div style={{display:tab==="spaces"?"block":"none"}}>
+          <SpacesTab spaces={spaces} setSpaces={setSpaces} searchQ={searchQ} pushUndo={pushUndo} sendToVoid={sendToVoid}
             navSpId={navSpId} navPortId={navPortId} navProjId={navProjId} navTaskId={navTaskId}
-            onNavConsumed={()=>{setNavSpId(null);setNavPortId(null);setNavProjId(null);setNavTaskId(null);}}/>}
+            onNavConsumed={()=>{setNavSpId(null);setNavPortId(null);setNavProjId(null);setNavTaskId(null);}}
+            persistActiveSpId={spActiveSpId}     onActiveSpId={setSpActiveSpId}
+            persistActivePortId={spActivePortId} onActivePortId={setSpActivePortId}
+            persistActiveProjId={spActiveProjId} onActiveProjId={setSpActiveProjId}
+            persistCollapsedSp={spCollapsedSp}   onCollapsedSp={setSpCollapsedSp}/>
+        </div>
         {tab==="today"    &&<TodayFocus  spaces={spaces} setSpaces={setSpaces} onNavigateTo={navigateTo}/>}
         {tab==="gantt"    &&<GanttTab    spaces={spaces}
             selSpaces={gSelSpaces}   setSelSpaces={setGSelSpaces}
@@ -4058,6 +4325,7 @@ export default function App(){
         {tab==="archive"  &&<ArchiveTab  spaces={spaces} setSpaces={setSpaces}/>}
         {tab==="void"     &&<TheVoidTab  theVoid={theVoid} setTheVoid={setTheVoid} spaces={spaces} setSpaces={setSpaces}/>}
       </div>
+      </>}
     </div>
   );
 }
